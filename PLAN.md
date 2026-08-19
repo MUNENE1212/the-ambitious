@@ -1,0 +1,206 @@
+# The Ambitious — Platform Blueprint
+
+Product & technical plan for the **Young & Ambitious Self Help Group** member investment PWA.
+
+- **Prepared:** 19 Aug 2026
+- **Source rules:** Y&A Constitution (`Y & A- CONSTITUION.pdf`)
+- **Source ledger:** `APRIL2026.xlsx`, FY Jul–Jun
+- **Reference build:** [`kuku-egg-tracker`](/media/munen/muneneENT/2026/zebray/kuku-egg-tracker) (Next.js + Firebase PWA)
+- **Status:** Plan only — no implementation started
+- **Published version:** https://claude.ai/code/artifact/3e6733d7-842d-432f-90a8-518f80f29275
+
+---
+
+## A. Purpose & scope
+
+Young & Ambitious runs on WhatsApp reminders and monthly Excel sheets today — thirteen members, a fiscal year of July–June, contribution totals hand-carried forward month to month. The constitution already defines the rules precisely; the app's job is to **execute those rules automatically** and make the group's finances visible to every member, every day, not just at the AGM.
+
+- **Keep** — every rule in the constitution, as configurable defaults an admin can tune without redeploying code — amounts, deadlines, welfare payouts.
+- **Add** — self-serve login and contribution history, automatic fine calculation, live funds/investment tracking, and a curated feed of external opportunities.
+- **Reuse** — the architecture, auth pattern, verification-by-vote model, and financial-formula approach already proven in the Kuku Egg Tracker build.
+
+---
+
+## B. Navigation map
+
+Five bottom-nav destinations on mobile, same shell pattern as the reference app (TopBar + BottomNav around a client-side Firebase page).
+
+| Tab | Purpose |
+|---|---|
+| **Home** | Animated overview: group funds, this member's contribution status, countdown to next meeting/AGM, live activity feed. See Section C. |
+| **Contributions** | This member's month-by-month ledger (mirrors the existing xlsx grid), fine breakdown, M-Pesa code submission for the current month. |
+| **Funds** | Group-wide cash + bank balances, loans, investments and expenses. Tabs: Overview / Loans / Investments / Expenses. |
+| **Forum** | Discussion, proposals, and investment ideas — including the curated Opportunities feed as a pinned category. |
+| **More** | Meeting minutes, member directory, my profile, settings (admin), and the constitution itself as an in-app reference. |
+
+---
+
+## C. Home page experience
+
+This is the page the brief asks to be "richly shared and animated" — it has to answer, at a glance and without navigating anywhere: how healthy are our funds, am I in good standing, and what just happened.
+
+**What makes it feel alive:**
+
+- **Count-up numbers** on the hero balance and stat tiles when the page mounts, not on every re-render — respects `prefers-reduced-motion`.
+- **A real-time activity feed** sourced from the same audit trail every module already writes (contribution verified, fine applied, expense recorded, forum post) — no separate "activity" system to maintain.
+- **A standing indicator** that's honest, not decorative: green only when this member's current-month contribution is verified and no unpaid fines exist.
+- **A funds trend sparkline** (Recharts, as in the reference app) showing the last 6 months of total group funds — makes growth (the group's whole purpose) visible without a tap.
+- **Member spotlight** — small, non-competitive: e.g. "Cecilia has a 14-month clean streak," pulled from real data, not manufactured gamification.
+
+Illustrative hero: `Total Group Funds · live — KES 231,450`, stat tiles for `My Status`, `My Fines (FY)`, `Next AGM`, and a feed of recent events (verifications, auto-fines, new proposals).
+
+---
+
+## D. Roles & permissions
+
+The constitution already defines nine office-bearer roles (Section C). Map them directly onto the reference app's `admin / manager / member` role field plus a `titles[]` array — the same pattern `roles.ts` already uses for treasurer.
+
+| Constitution office | App role | Extra permissions unlocked |
+|---|---|---|
+| Chairperson / Vice-chairperson | `admin` | Full settings access, member management, signatory on withdrawals |
+| Treasurer | `admin` + title | Verify contributions, record deposits/withdrawals, signatory |
+| Secretary / Vice-secretary | `manager` + title | Create & finalize meeting minutes, mark attendance |
+| Discipline master | `manager` + title | Apply / waive fines, record excused absences, view fines ledger |
+| Coordinator | `manager` | Post events, manage the Opportunities feed drafts |
+| Committee member | `member` | Standard member access + minutes visibility |
+| Ordinary / secondary member | `member` | Own contribution history, vote/approve, forum, funds view |
+
+Secondary (minor) members log in under their adult representative's account per the constitution's binding clause — the representative's profile carries a `representing: memberId` link rather than a separate login.
+
+---
+
+## E. Contribution verification & automatic fining
+
+The heart of the request: "simple verification procedures... with automatic fining and rule implementation." Extends the reference app's `Contribution` model (already has `mpesaCode`, `fineAmount`, `verifiedBy`, `status`) with a scheduled rule engine.
+
+**Flow:**
+
+1. **Record generated** — On the 1st of each month, a Cloud Function creates a `Pending` contribution record for every active member, amount pulled from Settings (500, or 900 for a secondary member).
+2. **Member pays & submits** — Member pays via M-Pesa and enters the transaction code in-app. Status moves to `Submitted` — visible to the treasurer, not yet counted as verified funds.
+3. **Treasurer verifies** — One tap: match the code against the till statement, mark `Paid`. This is the "simple verification" — one approver, one action, fully logged (`verifiedBy`, `verifiedAt`), no committee vote needed for routine contributions.
+4. **Deadline check (automatic)** — A scheduled function compares each month's cutoff date (configurable, e.g. the 10th) against submission time. Anything still `Pending` after the cutoff flips to `Late` and a fine is stamped automatically from Settings — no admin action required.
+5. **Fine settles with the next payment** — Outstanding `fineAmount` rolls forward and must clear before a member's status shows green again — matching how the real ledger already carries fines in their own column next to each month's contribution.
+
+**Rule engine — defaults seeded from the constitution, all editable in Settings:**
+
+| Rule | Default (KES) | Trigger |
+|---|---:|---|
+| Entry fee (murangano) | 5,000 | New member joins — nonrefundable, plus back-contributions owed |
+| Monthly contribution — primary member | 500 | Auto-generated 1st of each month |
+| Monthly contribution — secondary (minor) member | 900 | Auto-generated 1st of each month |
+| Meeting fee (tea/refreshments) | 100 | Every meeting, physical or virtual |
+| Late payment fine | 200 | Contribution still unpaid past monthly cutoff |
+| Virtual meeting absence | 500 | Unmarked as attended, no prior excuse logged |
+| AGM absence | 3,000 | Not marked present on 20 Oct AGM |
+| Welfare — parent's death | 500 / member | Discipline master or admin logs a welfare event |
+| Welfare — nuclear family death | 1,000 / member | Welfare event, deducted from arrears/shares if unpaid |
+| Welfare — member's death | 2,000 / member | Welfare event |
+| Exit deduction | 20% | Voluntary exit, applied to refunded share value |
+
+**Three-strikes rule, encoded not just documented:** the constitution auto-terminates membership after three consecutive unexcused meeting absences. The attendance module counts consecutive misses per member and raises a flag to admins at strike two, and a required committee confirmation step at strike three — the app assists the rule, a human still executes expulsion.
+
+---
+
+## F. Funds, loans & investments
+
+The current spreadsheet already tracks *Total Contributions → Total Expense → Available Funds*. The app computes this live, the same way `financial.ts` derives cash-on-hand and bank balance in the reference app, extended with an Investments bucket.
+
+- **Funds Overview** — Cash on hand + bank balance + investment value − outstanding loans = Total Group Funds. Formula shown transparently on the Funds tab, not just the final number, so members can audit it themselves.
+- **Loans** — Objective D of the constitution is "to secure loans from any financial institution" — modelled as external loans the group takes, plus an optional internal peer-loan ledger (principal, interest, repayments) if the committee wants it, off by default.
+- **Investments** — New ledger: what the group put money into, when, expected/actual return. Each entry can link to the forum proposal that approved it — the paper trail the group currently keeps only in meeting minutes.
+- **Expenses** — Categorized, same voting-verification pattern as the reference app (a proposal-worthy spend needs sign-off from active members before it posts).
+
+---
+
+## G. Opportunities feed — external data
+
+You asked for "possible pulling of available data for possible innovations" with external market/investment sources in mind. This is the least certain piece technically — costs and API access vary — so it's scoped as its own phase with a fallback that needs zero external accounts.
+
+- **Phase 1 — no external dependency:** Coordinator/admin-curated postings — business ideas, SACCO offers, land/investment leads members bring manually. Ships with the forum, costs nothing, works immediately.
+- **Phase 2 — pulled feeds:** Candidates — NSE (Nairobi Securities Exchange) daily prices, CBK reference rates, a curated business-news RSS. Each needs its own API key/cost check — flagged in Section N for committee decision.
+
+Either way, feed items land in the same `ForumCategory` pattern as existing posts (a new `Opportunity` category) — no separate content system.
+
+---
+
+## H. Forum, minutes & transparency
+
+"Full interaction and transparency" reuses the reference app's strongest pattern almost unchanged: nothing gets deleted, everything gets seen-by tracking, and money-moving actions require peer approval.
+
+- **Voting verification** — expenses, withdrawals and investments carry a `votes[]` array; majority of eligible active members (excluding the recorder) approves or rejects, exactly as `verification.ts` already implements.
+- **Meeting minutes** — structured agenda items, draft until the secretary marks them Official (then locked), attendance captured here feeds the auto-fining absence rule directly.
+- **Forum** — Observation / Proposal / Question / Report / General / *Opportunity* categories; investment decisions get proposed and discussed here before a Funds entry is created.
+- **No deletion, ever** — same audit-trail constraint as the reference app's Firestore rules. For a group's money, an immutable record matters more than tidy history.
+
+---
+
+## I. Member lifecycle
+
+The constitution's membership rules (max 20, entry fee, four exit paths) become explicit member states rather than tribal knowledge.
+
+| Path | What the app does |
+|---|---|
+| **Join** | Admin creates profile → entry fee + any back-owed contributions auto-invoiced → account active once treasurer verifies entry fee payment. Group hard-caps at 20 active members. |
+| **Voluntary exit** | 3-month notice logged, dues-clearance checklist shown, refund held as "pending share resale," 20% deduction calculated automatically on payout. |
+| **Expulsion / suspension** | Triggered by admin action or the auto-flagged three-absence rule (Section E); suspended accounts lock but retain read access to their own history; readmission requires a fee the committee sets per case. |
+| **Death** | Admin transfers the account to a recorded next-of-kin contact, who chooses to continue membership or exit with full share value (no 20% deduction, per constitution). |
+
+---
+
+## J. Data model
+
+Firestore collections, extending the reference app's schema. **New collections marked NEW.**
+
+| Collection | Key fields | Notes |
+|---|---|---|
+| `members` | name, phone, role, titles[], representing?, joinedAt, active | + `representing` for secondary-member links |
+| `contributions` | memberId, month, amount, fineAmount, status, mpesaCode, verifiedBy | Auto-generated monthly, as today |
+| `fines` **NEW** | memberId, type, amount, reason, waivedBy?, createdAt | Unifies late-payment, absence & welfare-arrears fines in one ledger |
+| `attendance` **NEW** | meetingId, memberId, present, excused, consecutiveMisses | Drives the three-strikes rule |
+| `investments` **NEW** | title, amountInvested, expectedReturn, actualReturn, proposalId, status | Linked to forum proposal |
+| `loans` | borrowerName, principal, interestRate, repayments[] | Reused, internal peer-loans optional |
+| `bankTransactions` | type, amount, proposalId?, approvals[] | Reused as-is |
+| `expenses` | category, amount, votes[], seenBy[] | Reused as-is |
+| `forumPosts` | title, body, category (+ Opportunity), replies[] | One category added |
+| `meetingMinutes` | agendaItems[], attendees[], status | Reused; feeds attendance |
+| `config/settings` | all rule amounts from Section E, cutoff dates, member cap | Fully admin-editable, no hard defaults |
+
+---
+
+## K. Technical architecture
+
+Deliberately the same stack as `kuku-egg-tracker` — proven, free-tier-friendly, and it means real code (types, verification logic, financial formulas, auth flow) can be adapted rather than rebuilt.
+
+- **Frontend** — Next.js (App Router) + TypeScript + Tailwind CSS. All pages client-rendered against Firestore `onSnapshot` listeners for realtime updates across every logged-in member's phone.
+- **Backend** — Firebase: Firestore for data, phone + 4-digit PIN auth (bcrypt hash, same as reference), **Cloud Functions on a schedule** for the new piece — monthly record generation and the deadline/fining sweep (Section E) — the reference app has no scheduled functions yet, this is the one real backend addition.
+- **PWA** — Installable manifest + service worker, offline-readable cached data, same icon/splash pattern as the reference app's `public/` setup.
+- **Motion & charts** — Recharts for the funds trend and dashboards (already a dependency in the reference app); count-up numbers and reveal transitions via CSS/Framer Motion, gated by `prefers-reduced-motion`.
+
+---
+
+## L. Migrating existing records
+
+The FY2025-26 sheet (`APRIL2026.xlsx`) already gives real seed data: 13 members, a running "Previous Total" of KES 125,250 carried in from prior years, KES 52,600 contributed so far this FY, KES 177,850 lifetime — and fine entries (KES 200 each) matching the constitution's late-payment rule exactly.
+
+- A one-time import script reads each historical workbook (23-24, 24-25, and monthly 2025-26 sheets already on file) and writes one `contributions` record per member per month, preserving the real fine history instead of starting the ledger from zero.
+- The "Previous Total" carry-forward becomes each member's `openingBalance`, exactly mirroring how `Settings.openingCashBalance` already seeds the reference app's financial calculations.
+- The Expenses workbooks (`EXPENSES 2024-25`, etc.) import the same way into the `expenses` collection, marked `verified` since they predate the app.
+
+---
+
+## M. Rollout roadmap
+
+1. **Foundation** — Scaffold from the reference app: auth, member profiles + roles, Settings with all constitution defaults editable, PWA shell, animated home page (Section C).
+2. **Money core** — Contributions with M-Pesa code submission + treasurer verification, the scheduled auto-fining function, fines ledger, funds overview.
+3. **Transparency layer** — Expenses/withdrawals with vote-verification, meeting minutes + attendance (wires into the three-strikes rule), forum.
+4. **Growth layer** — Investments ledger, loans, Opportunities feed (curated first, external feeds once Section N is decided), historical data migration.
+5. **Polish & launch** — Animation pass, admin walkthrough for the treasurer/secretary, seed real member accounts, retire the spreadsheet.
+
+---
+
+## N. Open decisions for the committee
+
+- **External data sources** — Which feeds are worth the API cost/maintenance: NSE prices, CBK rates, a news RSS? Can start curated-only and add feeds later without any rework.
+- **Internal peer loans** — The constitution only mentions securing loans *from institutions*. Does the group also want member-to-member loans modeled (interest rate, terms)?
+- **Contribution cutoff date** — Constitution doesn't fix a due-day for the monthly 500/900 — needs a committee-agreed date to drive the auto-fine trigger.
+- **M-Pesa integration depth** — Manual code entry + treasurer verification (matches current practice) vs. a Daraja API push for automatic matching — bigger scope, real cost/complexity jump.
