@@ -92,7 +92,7 @@ The heart of the request: "simple verification procedures... with automatic fini
 | Entry fee (murangano) | 5,000 | New member joins — nonrefundable, plus back-contributions owed |
 | Monthly contribution — primary member | 500 | Auto-generated 1st of each month |
 | Monthly contribution — secondary (minor) member | 900 | Auto-generated 1st of each month |
-| Meeting fee (tea/refreshments) | 100 | Every meeting, physical or virtual |
+| Meeting fee (AGM party fund) | 100 | Every meeting, physical or virtual — no refreshments purchased; ring-fenced toward the October AGM party |
 | Late payment fine | 200 | Contribution unpaid by the 5th of the following month |
 | Virtual meeting absence | 500 | Unmarked as attended, no prior excuse logged |
 | AGM absence | 3,000 | Not marked present on 20 Oct AGM |
@@ -113,6 +113,7 @@ The current spreadsheet already tracks *Total Contributions → Total Expense �
 - **Loans — deferred, not in v1** — The group has decided not to lend to members yet. Objective D of the constitution ("to secure loans from any financial institution") is about the group borrowing externally, not lending internally — that stays a future consideration, not built now.
 - **Investments** — New ledger: what the group put money into, when, expected/actual return. Each entry can link to the forum proposal that approved it — the paper trail the group currently keeps only in meeting minutes.
 - **Expenses** — Categorized, same voting-verification pattern as the reference app (a proposal-worthy spend needs sign-off from active members before it posts).
+- **AGM Party Fund** — a ring-fenced bucket, not part of general funds. Every meeting's 100/member fee lands here instead of buying refreshments; the running balance is visible on the Funds tab year-round, spent down at the October AGM, then the cycle restarts.
 
 ---
 
@@ -121,7 +122,16 @@ The current spreadsheet already tracks *Total Contributions → Total Expense �
 You asked for "possible pulling of available data for possible innovations" — confirmed scope is **trading, forex, stocks, and crypto** market data. This is the least certain piece technically — costs and API access vary — so it's scoped as its own phase with a fallback that needs zero external accounts.
 
 - **Phase 1 — no external dependency:** Coordinator/admin-curated postings — business ideas, SACCO offers, land/investment leads members bring manually. Ships with the forum, costs nothing, works immediately.
-- **Phase 2 — live market feeds:** Stocks (NSE daily prices), forex reference rates (e.g. USD/KES and majors), and crypto pricing (BTC, ETH, etc.) pulled from a public market-data API and shown as a "Markets" widget alongside the Opportunities feed. Provider choice needs a cost/rate-limit check — flagged in Section N.
+- **Phase 2 — live market feeds, researched open/free sources:**
+
+  | Market | Recommended source | Notes |
+  |---|---|---|
+  | Crypto | [CoinGecko Keyless Public API](https://docs.coingecko.com/docs/keyless-public-api) | Free, no signup/key, 30 req/min, 17,000+ coins. Fine for a periodically-refreshed widget; not for high-frequency polling. |
+  | Forex (KES) | [Central Bank of Kenya — Forex](https://www.centralbank.go.ke/forex/) | Official daily indicative rates, free, authoritative for a Kenyan group. No JSON API — needs a small server-side fetch/parse of the published page, refreshed once daily. |
+  | Forex (backup) | [CurrencyExchangeTool.com](https://www.currencyexchangetool.com/api-docs) | Free REST API, no key, no signup, covers KES — smaller/less-established provider, worth a reliability check before relying on it. |
+  | Stocks (NSE) | **Unresolved — no clean free official API.** Candidates: [NSE's own Data Services API](https://www.nse.co.ke/dataservices/api-specification-documents/) (likely requires registration/cost), [mystocks.africa's API](https://mystocks.africa/african-stock-market-api) (free sandbox key, production pricing to confirm), or an open-source scraper like [kwoshvick/NSE-Stock-Price-Crawler](https://github.com/kwoshvick/NSE-Stock-Price-Crawler) (unofficial, fragile to site changes). |
+
+  Shown as a "Markets" widget alongside the Opportunities feed. Crypto and forex can ship as soon as Phase 2 starts; NSE stocks stay a manual/coordinator-curated line item until one of the above is vetted.
 
 Either way, feed items land in the same `ForumCategory` pattern as existing posts (a new `Opportunity` category) — no separate content system.
 
@@ -146,9 +156,17 @@ The constitution's membership rules (max 20, entry fee, four exit paths) become 
 | Path | What the app does |
 |---|---|
 | **Join** | Admin creates profile → entry fee + any back-owed contributions auto-invoiced → account active once treasurer verifies entry fee payment. Group hard-caps at 20 active members. |
-| **Voluntary exit** | 3-month notice logged, dues-clearance checklist shown, refund held as "pending share resale," 20% deduction calculated automatically on payout. |
+| **Exit request** | Either the member themselves or an admin can initiate. See the dedicated flow below. |
 | **Expulsion / suspension** | Triggered by admin action or the auto-flagged three-absence rule (Section E); suspended accounts lock but retain read access to their own history; readmission requires a fee the committee sets per case. |
 | **Death** | Admin transfers the account to a recorded next-of-kin contact, who chooses to continue membership or exit with full share value (no 20% deduction, per constitution). |
+
+**Exit request flow (voluntary exit):**
+
+1. **Request raised** — by the member themselves, or by an admin on the member's behalf (e.g. following up a verbal notice) — captured with a reason and date, starting the constitution's 3-month notice clock.
+2. **Auto-calculated refund, shown in full** — the engine sums total contributions paid + welfare paid, subtracts outstanding fines/arrears and the constitutional 20% exit deduction, and shows every line item — not just the final number — so the exiting member and the committee see the same math.
+3. **Majority vote** — the same eligible-active-member majority pattern used for expense/withdrawal verification (Section H), excluding the exiting member, must approve before the exit proceeds.
+4. **Share resale wait** — per the constitution, actual payout still waits until the vacated share is resold to a replacement member; status shows "Approved — pending share resale" until then.
+5. **Payout & closeout** — the treasurer marks the refund paid once resold; the member's account moves to Exited, full history retained (no deletion, as everywhere else in the app).
 
 ---
 
@@ -163,6 +181,7 @@ Firestore collections, extending the reference app's schema. **New collections m
 | `fines` **NEW** | memberId, type, amount, reason, waivedBy?, createdAt | Unifies late-payment, absence & welfare-arrears fines in one ledger |
 | `attendance` **NEW** | meetingId, memberId, present, excused, consecutiveMisses | Drives the three-strikes rule |
 | `investments` **NEW** | title, amountInvested, expectedReturn, actualReturn, proposalId, status | Linked to forum proposal |
+| `exitRequests` **NEW** | memberId, initiatedBy (member\|admin), reason, refundBreakdown{contributions, welfare, arrears, deduction20pct, netRefund}, votes[], status | Drives Section I's exit-request flow |
 | `loans` | borrowerName, principal, interestRate, repayments[] | Present in schema, **unused in v1** — no member loans yet |
 | `bankTransactions` | type, amount, proposalId?, approvals[] | Reused as-is |
 | `expenses` | category, amount, votes[], seenBy[] | Reused as-is |
@@ -214,7 +233,10 @@ The FY2025-26 sheet (`APRIL2026.xlsx`) already gives real seed data: 13 members,
 - External data scope → **confirmed: trading, forex, stocks, crypto** (Section G).
 - Roles → **interchangeable, not exclusive**; a member can hold multiple titles, and title badges show on every post (Section D).
 - Leadership communication → **Announcements category**, leadership-only to post, open to all to comment (Section H).
+- Crypto/forex data source → **CoinGecko keyless API + CBK's official forex page** (Section G) — both free, no signup.
+- Meeting refreshments → **discontinued**; the 100/meeting fee now funds a ring-fenced AGM Party Fund instead (Sections E, F).
+- Member exit → **either member or admin can initiate**, refund auto-calculated with a full line-item breakdown, and requires majority member approval before payout (Section I).
 
 **Still open:**
 
-- **Market-data provider** — which API for stocks/forex/crypto (e.g. NSE data source, a forex rates API, a crypto pricing API)? Each has its own cost, rate limits, and reliability tradeoffs to weigh before Phase 2 build.
+- **NSE stock-price source** — no clean official free API confirmed (Section G table). Needs a decision between the NSE's own paid data-services API, mystocks.africa's commercial API, or maintaining an unofficial scraper — or simply deferring live NSE prices and keeping that line curator-updated for now.
