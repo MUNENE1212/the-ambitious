@@ -42,12 +42,14 @@ This is the page the brief asks to be "richly shared and animated" — it has to
 **What makes it feel alive:**
 
 - **Count-up numbers** on the hero balance and stat tiles when the page mounts, not on every re-render — respects `prefers-reduced-motion`.
+- **"What's your idea?" composer, right on Home** — a one-line input that posts straight to the forum (defaults to the Proposal category); no separate "new post" screen required to float an idea.
+- **Recent posts & replies, unhidden** — the last few forum posts and their latest replies render directly on Home, not tucked away in the Forum tab. Nothing the group discusses should need a second tap to find.
 - **A real-time activity feed** sourced from the same audit trail every module already writes (contribution verified, fine applied, expense recorded, forum post) — no separate "activity" system to maintain.
 - **A standing indicator** that's honest, not decorative: green only when this member's current-month contribution is verified and no unpaid fines exist.
 - **A funds trend sparkline** (Recharts, as in the reference app) showing the last 6 months of total group funds — makes growth (the group's whole purpose) visible without a tap.
 - **Member spotlight** — small, non-competitive: e.g. "Cecilia has a 14-month clean streak," pulled from real data, not manufactured gamification.
 
-Illustrative hero: `Total Group Funds · live — KES 231,450`, stat tiles for `My Status`, `My Fines (FY)`, `Next AGM`, and a feed of recent events (verifications, auto-fines, new proposals).
+Illustrative hero: `Total Group Funds · live — KES 231,450`, stat tiles for `My Status`, `My Fines (FY)`, `Next AGM`; a `💡 What's your idea?` composer; then a feed of recent posts/replies and events (verifications, auto-fines, new proposals) interleaved by recency.
 
 ---
 
@@ -78,7 +80,7 @@ The heart of the request: "simple verification procedures... with automatic fini
 1. **Record generated** — On the 1st of each month, a Cloud Function creates a `Pending` contribution record for every active member, amount pulled from Settings (500, or 900 for a secondary member).
 2. **Member pays & submits** — Member pays via M-Pesa and enters the transaction code in-app. Status moves to `Submitted` — visible to the treasurer, not yet counted as verified funds.
 3. **Treasurer verifies** — One tap: match the code against the till statement, mark `Paid`. This is the "simple verification" — one approver, one action, fully logged (`verifiedBy`, `verifiedAt`), no committee vote needed for routine contributions.
-4. **Deadline check (automatic)** — A scheduled function compares each month's cutoff date (configurable, e.g. the 10th) against submission time. Anything still `Pending` after the cutoff flips to `Late` and a fine is stamped automatically from Settings — no admin action required.
+4. **Deadline check (automatic)** — A scheduled function compares the cutoff — **the 5th of the following month** (e.g. July's contribution is due by 5 August), configurable in Settings — against submission time. Anything still `Pending` after the cutoff flips to `Late` and a fine is stamped automatically from Settings — no admin action required.
 5. **Fine settles with the next payment** — Outstanding `fineAmount` rolls forward and must clear before a member's status shows green again — matching how the real ledger already carries fines in their own column next to each month's contribution.
 
 **Rule engine — defaults seeded from the constitution, all editable in Settings:**
@@ -89,7 +91,7 @@ The heart of the request: "simple verification procedures... with automatic fini
 | Monthly contribution — primary member | 500 | Auto-generated 1st of each month |
 | Monthly contribution — secondary (minor) member | 900 | Auto-generated 1st of each month |
 | Meeting fee (tea/refreshments) | 100 | Every meeting, physical or virtual |
-| Late payment fine | 200 | Contribution still unpaid past monthly cutoff |
+| Late payment fine | 200 | Contribution unpaid by the 5th of the following month |
 | Virtual meeting absence | 500 | Unmarked as attended, no prior excuse logged |
 | AGM absence | 3,000 | Not marked present on 20 Oct AGM |
 | Welfare — parent's death | 500 / member | Discipline master or admin logs a welfare event |
@@ -106,7 +108,7 @@ The heart of the request: "simple verification procedures... with automatic fini
 The current spreadsheet already tracks *Total Contributions → Total Expense → Available Funds*. The app computes this live, the same way `financial.ts` derives cash-on-hand and bank balance in the reference app, extended with an Investments bucket.
 
 - **Funds Overview** — Cash on hand + bank balance + investment value − outstanding loans = Total Group Funds. Formula shown transparently on the Funds tab, not just the final number, so members can audit it themselves.
-- **Loans** — Objective D of the constitution is "to secure loans from any financial institution" — modelled as external loans the group takes, plus an optional internal peer-loan ledger (principal, interest, repayments) if the committee wants it, off by default.
+- **Loans — deferred, not in v1** — The group has decided not to lend to members yet. Objective D of the constitution ("to secure loans from any financial institution") is about the group borrowing externally, not lending internally — that stays a future consideration, not built now.
 - **Investments** — New ledger: what the group put money into, when, expected/actual return. Each entry can link to the forum proposal that approved it — the paper trail the group currently keeps only in meeting minutes.
 - **Expenses** — Categorized, same voting-verification pattern as the reference app (a proposal-worthy spend needs sign-off from active members before it posts).
 
@@ -114,10 +116,10 @@ The current spreadsheet already tracks *Total Contributions → Total Expense �
 
 ## G. Opportunities feed — external data
 
-You asked for "possible pulling of available data for possible innovations" with external market/investment sources in mind. This is the least certain piece technically — costs and API access vary — so it's scoped as its own phase with a fallback that needs zero external accounts.
+You asked for "possible pulling of available data for possible innovations" — confirmed scope is **trading, forex, stocks, and crypto** market data. This is the least certain piece technically — costs and API access vary — so it's scoped as its own phase with a fallback that needs zero external accounts.
 
 - **Phase 1 — no external dependency:** Coordinator/admin-curated postings — business ideas, SACCO offers, land/investment leads members bring manually. Ships with the forum, costs nothing, works immediately.
-- **Phase 2 — pulled feeds:** Candidates — NSE (Nairobi Securities Exchange) daily prices, CBK reference rates, a curated business-news RSS. Each needs its own API key/cost check — flagged in Section N for committee decision.
+- **Phase 2 — live market feeds:** Stocks (NSE daily prices), forex reference rates (e.g. USD/KES and majors), and crypto pricing (BTC, ETH, etc.) pulled from a public market-data API and shown as a "Markets" widget alongside the Opportunities feed. Provider choice needs a cost/rate-limit check — flagged in Section N.
 
 Either way, feed items land in the same `ForumCategory` pattern as existing posts (a new `Opportunity` category) — no separate content system.
 
@@ -129,7 +131,7 @@ Either way, feed items land in the same `ForumCategory` pattern as existing post
 
 - **Voting verification** — expenses, withdrawals and investments carry a `votes[]` array; majority of eligible active members (excluding the recorder) approves or rejects, exactly as `verification.ts` already implements.
 - **Meeting minutes** — structured agenda items, draft until the secretary marks them Official (then locked), attendance captured here feeds the auto-fining absence rule directly.
-- **Forum** — Observation / Proposal / Question / Report / General / *Opportunity* categories; investment decisions get proposed and discussed here before a Funds entry is created.
+- **Forum** — Observation / Proposal / Question / Report / General / *Opportunity* categories; investment decisions get proposed and discussed here before a Funds entry is created. Nothing here is walled off behind the Forum tab — Home surfaces the newest posts, replies, and the idea composer directly (Section C).
 - **No deletion, ever** — same audit-trail constraint as the reference app's Firestore rules. For a group's money, an immutable record matters more than tidy history.
 
 ---
@@ -158,7 +160,7 @@ Firestore collections, extending the reference app's schema. **New collections m
 | `fines` **NEW** | memberId, type, amount, reason, waivedBy?, createdAt | Unifies late-payment, absence & welfare-arrears fines in one ledger |
 | `attendance` **NEW** | meetingId, memberId, present, excused, consecutiveMisses | Drives the three-strikes rule |
 | `investments` **NEW** | title, amountInvested, expectedReturn, actualReturn, proposalId, status | Linked to forum proposal |
-| `loans` | borrowerName, principal, interestRate, repayments[] | Reused, internal peer-loans optional |
+| `loans` | borrowerName, principal, interestRate, repayments[] | Present in schema, **unused in v1** — no member loans yet |
 | `bankTransactions` | type, amount, proposalId?, approvals[] | Reused as-is |
 | `expenses` | category, amount, votes[], seenBy[] | Reused as-is |
 | `forumPosts` | title, body, category (+ Opportunity), replies[] | One category added |
@@ -193,14 +195,21 @@ The FY2025-26 sheet (`APRIL2026.xlsx`) already gives real seed data: 13 members,
 1. **Foundation** — Scaffold from the reference app: auth, member profiles + roles, Settings with all constitution defaults editable, PWA shell, animated home page (Section C).
 2. **Money core** — Contributions with M-Pesa code submission + treasurer verification, the scheduled auto-fining function, fines ledger, funds overview.
 3. **Transparency layer** — Expenses/withdrawals with vote-verification, meeting minutes + attendance (wires into the three-strikes rule), forum.
-4. **Growth layer** — Investments ledger, loans, Opportunities feed (curated first, external feeds once Section N is decided), historical data migration.
+4. **Growth layer** — Investments ledger, Opportunities feed (curated ideas first, then live stocks/forex/crypto market feeds once a provider is picked), historical data migration. Loans stay out of scope until the group decides to lend to members.
 5. **Polish & launch** — Animation pass, admin walkthrough for the treasurer/secretary, seed real member accounts, retire the spreadsheet.
 
 ---
 
 ## N. Open decisions for the committee
 
-- **External data sources** — Which feeds are worth the API cost/maintenance: NSE prices, CBK rates, a news RSS? Can start curated-only and add feeds later without any rework.
-- **Internal peer loans** — The constitution only mentions securing loans *from institutions*. Does the group also want member-to-member loans modeled (interest rate, terms)?
-- **Contribution cutoff date** — Constitution doesn't fix a due-day for the monthly 500/900 — needs a committee-agreed date to drive the auto-fine trigger.
+**Decided since the first draft:**
+
+- ~~Contribution cutoff date~~ → **5th of the following month** (Section E).
+- ~~Internal peer loans~~ → **No member loans in v1**; deferred indefinitely (Section F).
+- Forum visibility → **surfaced on Home**, not confined to the Forum tab (Sections C, H).
+- External data scope → **confirmed: trading, forex, stocks, crypto** (Section G).
+
+**Still open:**
+
+- **Market-data provider** — which API for stocks/forex/crypto (e.g. NSE data source, a forex rates API, a crypto pricing API)? Each has its own cost, rate limits, and reliability tradeoffs to weigh before Phase 2 build.
 - **M-Pesa integration depth** — Manual code entry + treasurer verification (matches current practice) vs. a Daraja API push for automatic matching — bigger scope, real cost/complexity jump.
