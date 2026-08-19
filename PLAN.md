@@ -49,7 +49,7 @@ This is the page the brief asks to be "richly shared and animated" — it has to
 - **A funds trend sparkline** (Recharts, as in the reference app) showing the last 6 months of total group funds — makes growth (the group's whole purpose) visible without a tap.
 - **Member spotlight** — small, non-competitive: e.g. "Cecilia has a 14-month clean streak," pulled from real data, not manufactured gamification.
 
-Illustrative hero: `Total Group Funds · live — KES 231,450`, stat tiles for `My Status`, `My Fines (FY)`, `Next AGM`; a `💡 What's your idea?` composer; then a feed of recent posts/replies and events (verifications, auto-fines, new proposals) interleaved by recency.
+Illustrative hero: `Total Group Funds · live — KES 231,450`, stat tiles for `My Status`, `My Fines (FY)`, `Next AGM`; any pinned leadership **Announcement** at the top; a `💡 What's your idea?` composer; then a feed of recent posts/replies and events (verifications, auto-fines, new proposals) interleaved by recency.
 
 ---
 
@@ -68,6 +68,8 @@ The constitution already defines nine office-bearer roles (Section C). Map them 
 | Ordinary / secondary member | `member` | Own contribution history, vote/approve, forum, funds view |
 
 Secondary (minor) members log in under their adult representative's account per the constitution's binding clause — the representative's profile carries a `representing: memberId` link rather than a separate login.
+
+**Titles are interchangeable, not exclusive.** The constitution pairs several offices as deputies — vice-chairperson stands in for chairperson, vice-secretary for secretary, coordinator deputizes the treasurer — so a member's `titles[]` can hold more than one entry, and permission checks look at *any* title that grants an action rather than a single fixed owner. Whichever title(s) a member holds render as small badges wherever they post — forum posts, replies, announcements, and contribution-verification stamps all show "Treasurer," "Secretary," etc. next to the name.
 
 ---
 
@@ -131,7 +133,8 @@ Either way, feed items land in the same `ForumCategory` pattern as existing post
 
 - **Voting verification** — expenses, withdrawals and investments carry a `votes[]` array; majority of eligible active members (excluding the recorder) approves or rejects, exactly as `verification.ts` already implements.
 - **Meeting minutes** — structured agenda items, draft until the secretary marks them Official (then locked), attendance captured here feeds the auto-fining absence rule directly.
-- **Forum** — Observation / Proposal / Question / Report / General / *Opportunity* categories; investment decisions get proposed and discussed here before a Funds entry is created. Nothing here is walled off behind the Forum tab — Home surfaces the newest posts, replies, and the idea composer directly (Section C).
+- **Forum** — Observation / Proposal / Question / Report / General / *Opportunity* / *Announcement* categories; investment decisions get proposed and discussed here before a Funds entry is created. Nothing here is walled off behind the Forum tab — Home surfaces the newest posts, replies, and the idea composer directly (Section C).
+- **Announcements** — a leadership-only posting category (any member holding an office-bearer title, per Section D) pinned above the regular feed on both Home and Forum. Open to comments from every member — leadership broadcasts, but the group can still respond, not a one-way notice board.
 - **No deletion, ever** — same audit-trail constraint as the reference app's Firestore rules. For a group's money, an immutable record matters more than tidy history.
 
 ---
@@ -163,7 +166,7 @@ Firestore collections, extending the reference app's schema. **New collections m
 | `loans` | borrowerName, principal, interestRate, repayments[] | Present in schema, **unused in v1** — no member loans yet |
 | `bankTransactions` | type, amount, proposalId?, approvals[] | Reused as-is |
 | `expenses` | category, amount, votes[], seenBy[] | Reused as-is |
-| `forumPosts` | title, body, category (+ Opportunity), replies[] | One category added |
+| `forumPosts` | title, body, category (+ Opportunity, Announcement), authorTitles[], replies[], pinned? | Two categories added; `authorTitles` renders the badge, `pinned` lifts Announcements above the feed |
 | `meetingMinutes` | agendaItems[], attendees[], status | Reused; feeds attendance |
 | `config/settings` | all rule amounts from Section E, cutoff dates, member cap | Fully admin-editable, no hard defaults |
 
@@ -206,10 +209,12 @@ The FY2025-26 sheet (`APRIL2026.xlsx`) already gives real seed data: 13 members,
 
 - ~~Contribution cutoff date~~ → **5th of the following month** (Section E).
 - ~~Internal peer loans~~ → **No member loans in v1**; deferred indefinitely (Section F).
+- ~~M-Pesa integration depth~~ → **Manual code entry + treasurer verification**, matching current practice — no Daraja API push for now (Section E).
 - Forum visibility → **surfaced on Home**, not confined to the Forum tab (Sections C, H).
 - External data scope → **confirmed: trading, forex, stocks, crypto** (Section G).
+- Roles → **interchangeable, not exclusive**; a member can hold multiple titles, and title badges show on every post (Section D).
+- Leadership communication → **Announcements category**, leadership-only to post, open to all to comment (Section H).
 
 **Still open:**
 
 - **Market-data provider** — which API for stocks/forex/crypto (e.g. NSE data source, a forex rates API, a crypto pricing API)? Each has its own cost, rate limits, and reliability tradeoffs to weigh before Phase 2 build.
-- **M-Pesa integration depth** — Manual code entry + treasurer verification (matches current practice) vs. a Daraja API push for automatic matching — bigger scope, real cost/complexity jump.
