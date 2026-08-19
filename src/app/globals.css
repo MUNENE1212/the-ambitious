@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f4f5fa;
+  --foreground: #1c2440;
+}
+
+/*
+ * Brand override: the whole UI is built on Tailwind's `amber-*` utility
+ * classes (copied from the reference app). Rather than touch every file,
+ * we repaint the `amber` scale itself to the group's navy identity, and
+ * add a small `gold` scale for accent use (title badges, highlights).
+ */
+@theme {
+  --color-amber-50: #eef1f8;
+  --color-amber-100: #dce2f0;
+  --color-amber-200: #b9c5e1;
+  --color-amber-300: #93a3cc;
+  --color-amber-400: #6c7fae;
+  --color-amber-500: #4e5f8e;
+  --color-amber-600: #384870;
+  --color-amber-700: #293759;
+  --color-amber-800: #1e2a47;
+  --color-amber-900: #182849;
+
+  --color-gold-50: #fbf3e1;
+  --color-gold-100: #f4e2b8;
+  --color-gold-200: #e9cb86;
+  --color-gold-300: #dcae58;
+  --color-gold-500: #b4801f;
+  --color-gold-600: #96741a;
+  --color-gold-700: #7a5714;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --animate-slide-up: slide-up 0.3s ease-out;
+  --animate-count-up: count-up 0.6s ease-out both;
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes count-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* PWA safe areas for notched phones */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Hide scrollbar but keep functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Input number spinner removal for mobile */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}

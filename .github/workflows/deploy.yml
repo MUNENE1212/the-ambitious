@@ -1,0 +1,179 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref (branch/tag/SHA) to deploy'
+        required: false
+        default: 'main'
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+    env:
+      NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
+      NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
+    steps:
+      - name: Resolve target SHA
+        id: sha
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            REF="${{ inputs.ref }}"
+            echo "value=$(git ls-remote https://github.com/${{ github.repository }}.git "$REF" | head -1 | cut -f1)" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.sha.outputs.value }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint + typecheck
+        run: |
+          npm run lint:strict
+          npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Prepare deploy bundle
+        run: |
+          set -euo pipefail
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "SHORT_SHA=$SHORT_SHA" >> "$GITHUB_ENV"
+
+          # Refresh contents inside the standalone bundle:
+          #   .next/static/  -> static assets (not included by next build)
+          #   public/        -> public files (not auto-copied in Next 16 standalone)
+          # Use `cp -r src/. dst/` to overwrite in place (not nest into src/)
+          mkdir -p .next/standalone/public
+          cp -r .next/static/. .next/standalone/.next/static/
+          cp -r public/. .next/standalone/public/
+          node scripts/stamp-sw-cache.mjs .next/standalone/public/sw.js
+
+          # Bundle layout the VPS expects (paths in the tarball):
+          #   .next/standalone/server.js
+          #   .next/standalone/public/sw.js
+          #   .next/standalone/.next/static
+          #   ecosystem.config.cjs
+          #   deploy-remote.sh
+          tar -czf deploy.tar.gz \
+            -C "$GITHUB_WORKSPACE" \
+            .next/standalone \
+            ecosystem.config.cjs \
+            scripts/deploy-remote.sh
+
+      - name: Extract deploy-remote.sh for VPS use
+        run: cp scripts/deploy-remote.sh deploy-remote.sh
+
+      - name: Verify bundle layout
+        run: |
+          set -euo pipefail
+          echo "Tarball contents (first 30):"
+          tar -tzf deploy.tar.gz | sort | head -30
+
+          # Hard-fail on missing critical paths so we never ship a broken bundle.
+          # Paths match what tar lists (no leading ./).
+          for required in \
+            '.next/standalone/server.js' \
+            '.next/standalone/public/sw.js' \
+            '.next/standalone/.next/static' \
+            'ecosystem.config.cjs' \
+            'scripts/deploy-remote.sh'
+          do
+            if ! tar -tzf deploy.tar.gz | grep -qx "$required" && \
+               ! tar -tzf deploy.tar.gz | grep -q "^${required%/}$" && \
+               ! tar -tzf deploy.tar.gz | grep -q "^${required}/"; then
+              echo "ERROR: required path '$required' missing from tarball" >&2
+              exit 1
+            fi
+          done
+          echo "Bundle layout OK"
+
+      - name: Copy artifacts to VPS
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: deploy.tar.gz
+          target: /opt/kuku-egg-tracker
+
+      - name: Extract deploy-remote.sh on VPS
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          command_timeout: 5m
+          script: |
+            set -euo pipefail
+            cd /opt/kuku-egg-tracker
+            tar -xzf deploy.tar.gz scripts/deploy-remote.sh
+            mv scripts/deploy-remote.sh deploy-remote.sh
+            chmod +x deploy-remote.sh
+
+      - name: Atomic deploy + health check
+        id: deploy
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            set -euo pipefail
+            cd /opt/kuku-egg-tracker
+            export PORT=3004
+            export TARBALL=/opt/kuku-egg-tracker/deploy.tar.gz
+            bash /opt/kuku-egg-tracker/deploy-remote.sh "$SHORT_SHA"
+
+      - name: Cleanup VPS bundle
+        if: always()
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: rm -f /opt/kuku-egg-tracker/deploy.tar.gz
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Deploy summary"
+            echo ""
+            echo "- Commit: \`${{ steps.sha.outputs.value }}\`"
+            echo "- Result: ${{ job.status }}"
+            echo "- Run: ${{ github.run_id }}"
+          } >> "$GITHUB_STEP_SUMMARY"

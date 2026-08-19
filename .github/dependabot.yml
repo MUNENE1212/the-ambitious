@@ -1,0 +1,38 @@
+version: 2
+updates:
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '06:00'
+      timezone: 'Africa/Nairobi'
+    open-pull-requests-limit: 5
+    groups:
+      production-dependencies:
+        dependency-type: 'production'
+        patterns:
+          - '*'
+      development-dependencies:
+        dependency-type: 'development'
+        patterns:
+          - '*'
+    ignore:
+      # Next.js and React pinned to specific versions for build reproducibility
+      - dependency-name: 'next'
+      - dependency-name: 'eslint-config-next'
+      - dependency-name: 'react'
+      - dependency-name: 'react-dom'
+
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '06:00'
+      timezone: 'Africa/Nairobi'
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        patterns:
+          - '*'

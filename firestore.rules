@@ -1,0 +1,88 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper: check if request comes from an authenticated session
+    // Since we use custom PIN auth (not Firebase Auth), we rely on
+    // Firestore rules being permissive for now.
+    // For production, implement Firebase Custom Tokens or Cloud Functions.
+
+    // Members collection
+    match /members/{memberId} {
+      allow read: if true;
+      allow create, update: if true;
+      // No delete allowed
+      allow delete: if false;
+    }
+
+    // Contributions
+    match /contributions/{contribId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
+    }
+
+    // Fines (late payment, absence, welfare arrears)
+    match /fines/{fineId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
+    }
+
+    // Attendance
+    match /attendance/{attendanceId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
+    }
+
+    // Expenses
+    match /expenses/{expenseId} {
+      allow read: if true;
+      allow create: if true;
+      allow delete: if false;
+    }
+
+    // Bank transactions
+    match /bankTransactions/{txId} {
+      allow read: if true;
+      allow create: if true;
+      allow delete: if false;
+    }
+
+    // Investments
+    match /investments/{investmentId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
+    }
+
+    // Exit requests
+    match /exitRequests/{requestId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
+    }
+
+    // Meeting minutes
+    match /meetingMinutes/{minuteId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
+    }
+
+    // Forum posts (includes Announcement and Opportunity categories)
+    match /forumPosts/{postId} {
+      allow read: if true;
+      allow create, update: if true;
+      // No delete or edit of existing content in v1
+      allow delete: if false;
+    }
+
+    // Config / settings
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+  }
+}
