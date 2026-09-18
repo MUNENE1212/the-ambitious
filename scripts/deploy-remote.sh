@@ -2,7 +2,7 @@
 # Atomic deploy + health check + auto-rollback for the Next.js standalone bundle.
 #
 # Layout:
-#   /opt/kuku-egg-tracker/
+#   /opt/the-ambitious/
 #     deploy.tar.gz          # uploaded by CI
 #     deploy-remote.sh       # this script (uploaded by CI)
 #     releases/<sha>/        # one directory per deploy
@@ -10,16 +10,16 @@
 #     .current-sha           # last successfully deployed SHA
 #
 # Required env (or defaults):
-#   PORT=3004  HEALTH_URL=auto
+#   PORT=3005  HEALTH_URL=auto
 #
 # Args:
 #   $1  SHA of the new release (optional; defaults to contents of .current-sha + 1)
 
 set -euo pipefail
 
-APP_DIR=${APP_DIR:-/opt/kuku-egg-tracker}
-APP_NAME=${APP_NAME:-kuku-egg-tracker}
-PORT=${PORT:-3004}
+APP_DIR=${APP_DIR:-/opt/the-ambitious}
+APP_NAME=${APP_NAME:-the-ambitious}
+PORT=${PORT:-3005}
 HEALTH_URL=${HEALTH_URL:-http://127.0.0.1:${PORT}/}
 TARBALL=${TARBALL:-${APP_DIR}/deploy.tar.gz}
 KEEP_RELEASES=${KEEP_RELEASES:-5}
@@ -32,6 +32,28 @@ SHA_FILE="${APP_DIR}/.current-sha"
 
 log() { echo "[deploy] $*"; }
 err() { echo "[deploy] ERROR: $*" >&2; }
+
+# --- Rollback helper ---
+# Must be defined before the first call below: bash resolves function names at
+# call time, so a definition placed after the `exit 0` at the end of the script
+# is never in scope and every rollback path would die with "command not found".
+# $PREVIOUS is assigned later, before any call site — that is fine, the body is
+# only evaluated when invoked.
+rollback() {
+  if [ -z "${PREVIOUS:-}" ] || [ ! -d "$PREVIOUS" ]; then
+    err "No previous release to roll back to"
+    return
+  fi
+  err "Rolling back to $PREVIOUS"
+  ln -sfn "$PREVIOUS" "${CURRENT_LINK}.tmp"
+  mv -T "${CURRENT_LINK}.tmp" "$CURRENT_LINK"
+  cd "$CURRENT_LINK"
+  if pm2 describe "$APP_NAME" >/dev/null 2>&1; then
+    pm2 reload "$APP_NAME" --update-env >/dev/null 2>&1 || pm2 start ecosystem.config.cjs --only "$APP_NAME" || true
+  else
+    pm2 start ecosystem.config.cjs --only "$APP_NAME" || true
+  fi
+}
 
 if [ ! -f "$TARBALL" ]; then
   err "Tarball not found at $TARBALL"
@@ -132,20 +154,3 @@ fi
 
 log "Deploy $NEW_SHA complete"
 exit 0
-
-# --- Rollback helper ---
-rollback() {
-  if [ -z "$PREVIOUS" ] || [ ! -d "$PREVIOUS" ]; then
-    err "No previous release to roll back to"
-    return
-  fi
-  err "Rolling back to $PREVIOUS"
-  ln -sfn "$PREVIOUS" "${CURRENT_LINK}.tmp"
-  mv -T "${CURRENT_LINK}.tmp" "$CURRENT_LINK"
-  cd "$CURRENT_LINK"
-  if pm2 describe "$APP_NAME" >/dev/null 2>&1; then
-    pm2 reload "$APP_NAME" --update-env >/dev/null 2>&1 || pm2 start ecosystem.config.cjs --only "$APP_NAME" || true
-  else
-    pm2 start ecosystem.config.cjs --only "$APP_NAME" || true
-  fi
-}

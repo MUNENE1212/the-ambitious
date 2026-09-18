@@ -12,13 +12,20 @@
  * blank — assign them from the Admin screen; this script has no way to know
  * who currently holds which office.
  *
- * Requires: .env.local with Firebase credentials (same as seed-admin.mjs)
+ * Requires: .env.local with Firebase credentials (same as seed-admin.mjs), or
+ * pass --emulator to target the local Firebase emulator.
+ *
+ * Idempotent: a member whose name is already on the roster in Firestore is
+ * skipped. This matters — Firestore rules deny deletes, so a duplicate created
+ * by a second run could never be removed, only deactivated.
  */
 
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc } from 'firebase/firestore';
+import { getFirestore, connectFirestoreEmulator, collection, addDoc, getDocs } from 'firebase/firestore';
 import bcrypt from 'bcryptjs';
 import { readFileSync } from 'fs';
+
+const EMULATOR = process.argv.slice(2).includes('--emulator');
 
 try {
   const envFile = readFileSync('.env.local', 'utf8');
@@ -39,8 +46,8 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-  console.error('Missing Firebase config. Create a .env.local file with your Firebase credentials.');
+if (!EMULATOR && (!firebaseConfig.apiKey || !firebaseConfig.projectId)) {
+  console.error('Missing Firebase config. Create a .env.local file with your Firebase credentials, or pass --emulator.');
   process.exit(1);
 }
 
@@ -51,13 +58,34 @@ const ROSTER = [
   'Rosalind Karimi', 'Teddy Musyoki', 'Victor Murimi', 'Vindan Mwangi',
 ];
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+let db;
+if (EMULATOR) {
+  // Same demo project id the app uses under NEXT_PUBLIC_USE_EMULATORS (src/lib/firebase.ts).
+  db = getFirestore(initializeApp({ apiKey: 'demo-key', projectId: 'demo-project' }));
+  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+  console.log('Targeting the Firestore emulator at 127.0.0.1:8080\n');
+} else {
+  db = getFirestore(initializeApp(firebaseConfig));
+  console.log(`Targeting Firestore project ${firebaseConfig.projectId} (production)\n`);
+}
 
 async function seed() {
   const pinHash = await bcrypt.hash('0000', 10);
-  let i = 1;
+  const existing = new Set(
+    (await getDocs(collection(db, 'members'))).docs
+      .map(d => String(d.data().name ?? '').trim().toLowerCase())
+  );
+
+  let i = 0;
+  let created = 0;
+  let skipped = 0;
   for (const name of ROSTER) {
+    i++;
+    if (existing.has(name.trim().toLowerCase())) {
+      console.log(`Skipped ${name} — already on the roster`);
+      skipped++;
+      continue;
+    }
     const phone = `+254700000${String(i).padStart(3, '0')}`;
     await addDoc(collection(db, 'members'), {
       name,
@@ -75,10 +103,10 @@ async function seed() {
       updatedAt: Date.now(),
     });
     console.log(`Created ${name} — placeholder phone ${phone}, PIN 0000`);
-    i++;
+    created++;
   }
 
-  console.log(`\n${ROSTER.length} members created.`);
+  console.log(`\n${created} members created, ${skipped} skipped (already present).`);
   console.log('Next steps:');
   console.log('  1. Edit each member\'s real phone number from Admin.');
   console.log('  2. Assign office-bearer titles (chairperson, treasurer, ...) from Admin.');
