@@ -152,6 +152,10 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           command_timeout: 10m
+          # appleboy/ssh-action does not forward runner env vars automatically —
+          # without this, $SHORT_SHA is unset on the VPS and `set -u` aborts the
+          # deploy before deploy-remote.sh ever runs.
+          envs: SHORT_SHA
           script: |
             set -euo pipefail
             cd /opt/the-ambitious
