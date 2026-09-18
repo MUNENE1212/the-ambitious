@@ -99,11 +99,19 @@ jobs:
       - name: Verify bundle layout
         run: |
           set -euo pipefail
+
+          # List once into a file. Piping tar straight into `head`/`grep -q`
+          # makes the reader exit early, which SIGPIPEs tar (or sort) and, under
+          # `set -o pipefail`, fails the step or reports a present path as
+          # missing. `sed -n` reads to EOF, so it never closes the pipe early.
+          tar -tzf deploy.tar.gz > bundle-list.txt
+
           echo "Tarball contents (first 30):"
-          tar -tzf deploy.tar.gz | sort | head -30
+          sort bundle-list.txt | sed -n '1,30p'
 
           # Hard-fail on missing critical paths so we never ship a broken bundle.
-          # Paths match what tar lists (no leading ./).
+          # Paths match what tar lists: no leading ./, directories keep a
+          # trailing slash, so accept either spelling.
           for required in \
             '.next/standalone/server.js' \
             '.next/standalone/public/sw.js' \
@@ -111,9 +119,7 @@ jobs:
             'ecosystem.config.cjs' \
             'scripts/deploy-remote.sh'
           do
-            if ! tar -tzf deploy.tar.gz | grep -qx "$required" && \
-               ! tar -tzf deploy.tar.gz | grep -q "^${required%/}$" && \
-               ! tar -tzf deploy.tar.gz | grep -q "^${required}/"; then
+            if ! grep -qx -e "$required" -e "$required/" bundle-list.txt; then
               echo "ERROR: required path '$required' missing from tarball" >&2
               exit 1
             fi
