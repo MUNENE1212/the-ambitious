@@ -5,9 +5,8 @@ Product & technical plan for the **Young & Ambitious Self Help Group** member in
 - **Prepared:** 19 Aug 2026
 - **Source rules:** Y&A Constitution (`Y & A- CONSTITUION.pdf`)
 - **Source ledger:** `APRIL2026.xlsx`, FY Jul–Jun
-- **Reference build:** [`kuku-egg-tracker`](/media/munen/muneneENT/2026/zebray/kuku-egg-tracker) (Next.js + Firebase PWA)
+- **Reference build:** `kuku-egg-tracker` (Next.js + Firebase PWA)
 - **Status:** Plan only — no implementation started
-- **Published version:** https://claude.ai/code/artifact/3e6733d7-842d-432f-90a8-518f80f29275
 
 ---
 
@@ -47,7 +46,7 @@ This is the page the brief asks to be "richly shared and animated" — it has to
 - **A real-time activity feed** sourced from the same audit trail every module already writes (contribution verified, fine applied, expense recorded, forum post) — no separate "activity" system to maintain.
 - **A standing indicator** that's honest, not decorative: green only when this member's current-month contribution is verified and no unpaid fines exist.
 - **A funds trend sparkline** (Recharts, as in the reference app) showing the last 6 months of total group funds — makes growth (the group's whole purpose) visible without a tap.
-- **Member spotlight** — small, non-competitive: e.g. "Cecilia has a 14-month clean streak," pulled from real data, not manufactured gamification.
+- **Member spotlight** — small, non-competitive: e.g. "a 14-month clean streak," pulled from real data, not manufactured gamification.
 
 Illustrative hero: `Total Group Funds · live — KES 231,450`, stat tiles for `My Status`, `My Fines (FY)`, `Next AGM`; any pinned leadership **Announcement** at the top; a `💡 What's your idea?` composer; then a feed of recent posts/replies and events (verifications, auto-fines, new proposals) interleaved by recency.
 

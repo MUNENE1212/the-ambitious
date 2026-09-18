@@ -50,3 +50,10 @@ firebase.json
 
 # FUSE leftovers from deleted-but-open files on this mount
 .fuse_hidden*
+
+# Real membership roster — personal data, never committed
+scripts/roster.local.json
+
+# Local agent/assistant guidance (not part of the project)
+CLAUDE.md
+AGENTS.md

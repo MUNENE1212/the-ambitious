@@ -51,12 +51,20 @@ if (!EMULATOR && (!firebaseConfig.apiKey || !firebaseConfig.projectId)) {
   process.exit(1);
 }
 
-// Names as they appear in APRIL2026.xlsx
-const ROSTER = [
-  'Cecilia Wanjiru', 'Claire Makena', 'Denis Munene', 'Edwin Kibaki', 'Faith Njeri',
-  'George Kizito', 'Gregory Mutethia', 'Kelvin Murithi', 'Lawrence Kabara',
-  'Rosalind Karimi', 'Teddy Musyoki', 'Victor Murimi', 'Vindan Mwangi',
-];
+// The roster is personal data, so it lives in scripts/roster.local.json, which
+// is gitignored. Copy scripts/roster.example.json to create it.
+const ROSTER_FILE = new URL('./roster.local.json', import.meta.url);
+let ROSTER;
+try {
+  ROSTER = JSON.parse(readFileSync(ROSTER_FILE, 'utf8')).roster;
+} catch {
+  console.error('Missing scripts/roster.local.json — copy scripts/roster.example.json and fill in the roster.');
+  process.exit(1);
+}
+if (!Array.isArray(ROSTER) || ROSTER.length === 0) {
+  console.error('scripts/roster.local.json has no "roster" array.');
+  process.exit(1);
+}
 
 let db;
 if (EMULATOR) {

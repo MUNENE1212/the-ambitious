@@ -1,8 +1,9 @@
 # The Ambitious — Young & Ambitious Self Help Group
 
-A mobile-first Progressive Web App for the Young & Ambitious Self Help Group's contributions, funds, investments, and forum. Built with Next.js 16, Firebase, and Tailwind CSS — scaffolded from the same architecture as the group's [kuku-egg-tracker](../zebray/kuku-egg-tracker) app.
+A mobile-first Progressive Web App for the Young & Ambitious Self Help Group's contributions, funds, investments, and forum. Built with Next.js 16, Firebase, and Tailwind CSS.
 
-See [`PLAN.md`](./PLAN.md) for the full product/technical blueprint this build follows.
+See [`PLAN.md`](./PLAN.md) for the product/technical blueprint this build follows, and
+[`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for how the app is put together.
 
 ## Features
 
@@ -23,7 +24,7 @@ See [`PLAN.md`](./PLAN.md) for the full product/technical blueprint this build f
 - **Recharts** for the funds trend chart
 - **bcryptjs** for PIN hashing
 
-Node 20 is required (`.nvmrc`) — the sandbox this was built in defaults to Node 18, so run `nvm use 20` first.
+Node 20 is required (`.nvmrc`) — run `nvm use 20` before installing.
 
 ## Setup
 
@@ -53,10 +54,19 @@ npm run dev
 
 ### 4. Seed Data
 
+The membership roster is personal data, so it is not committed. Create it first:
+
+```bash
+cp scripts/roster.example.json scripts/roster.local.json   # then fill in the real names
+```
+
 ```bash
 node scripts/seed-admin.mjs      # creates the first admin (phone +254700000000, PIN 1234) + default settings
-node scripts/seed-members.mjs    # imports the real 13-member roster from APRIL2026.xlsx (placeholder phones, PIN 0000)
+node scripts/seed-members.mjs    # imports the roster (placeholder phones, PIN 0000)
 ```
+
+Both scripts are idempotent and both accept `--emulator` to target the local
+Firebase emulator instead of a live project.
 
 Change the admin credentials after first login, and have an admin fix each seeded member's real phone number and assign office-bearer titles from the Admin screen.
 

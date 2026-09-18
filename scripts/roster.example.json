@@ -1,0 +1,11 @@
+{
+  "_comment": "Copy to roster.local.json and fill in the real roster. roster.local.json is gitignored — the real membership list is personal data and must not be committed.",
+  "roster": [
+    "Member One",
+    "Member Two",
+    "Member Three"
+  ],
+  "nameAliases": {
+    "old name as written in an older ledger": "Current Name"
+  }
+}

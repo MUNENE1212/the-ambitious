@@ -97,10 +97,15 @@ const MONTH_NAMES = {
   JULY: 7, AUGUST: 8, SEPTEMBER: 9, OCTOBER: 10, NOVEMBER: 11, DECEMBER: 12,
 };
 
-// Ledger name quirks vs the members roster (seeded from APRIL2026.xlsx)
-const NAME_ALIASES = {
-  'cecilia gichuhi': 'Cecilia Wanjiru', // 23-24 sheet predates the name change
-};
+// Ledger name quirks vs the members roster (e.g. an older sheet predating a
+// name change). Personal data, so it lives alongside the roster in the
+// gitignored scripts/roster.local.json — see scripts/roster.example.json.
+let NAME_ALIASES = {};
+try {
+  NAME_ALIASES = JSON.parse(readFileSync(new URL('./roster.local.json', import.meta.url), 'utf8')).nameAliases ?? {};
+} catch {
+  // No local roster file — proceed with no aliases; unmatched names are reported.
+}
 
 const STOP_ROWS = /sub\s*total|previous\s*total|t?total\s*(contribution|expense)|available\s*funds|cash\s*at\s*hand/i;
 
