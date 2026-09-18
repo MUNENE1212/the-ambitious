@@ -127,7 +127,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           source: deploy.tar.gz
-          target: /opt/kuku-egg-tracker
+          target: /opt/the-ambitious
 
       - name: Extract deploy-remote.sh on VPS
         uses: appleboy/ssh-action@v1.2.5
@@ -138,7 +138,8 @@ jobs:
           command_timeout: 5m
           script: |
             set -euo pipefail
-            cd /opt/kuku-egg-tracker
+            mkdir -p /opt/the-ambitious
+            cd /opt/the-ambitious
             tar -xzf deploy.tar.gz scripts/deploy-remote.sh
             mv scripts/deploy-remote.sh deploy-remote.sh
             chmod +x deploy-remote.sh
@@ -153,10 +154,10 @@ jobs:
           command_timeout: 10m
           script: |
             set -euo pipefail
-            cd /opt/kuku-egg-tracker
-            export PORT=3004
-            export TARBALL=/opt/kuku-egg-tracker/deploy.tar.gz
-            bash /opt/kuku-egg-tracker/deploy-remote.sh "$SHORT_SHA"
+            cd /opt/the-ambitious
+            export PORT=3005
+            export TARBALL=/opt/the-ambitious/deploy.tar.gz
+            bash /opt/the-ambitious/deploy-remote.sh "$SHORT_SHA"
 
       - name: Cleanup VPS bundle
         if: always()
@@ -165,7 +166,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          script: rm -f /opt/kuku-egg-tracker/deploy.tar.gz
+          script: rm -f /opt/the-ambitious/deploy.tar.gz
 
       - name: Summary
         if: always()

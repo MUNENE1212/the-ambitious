@@ -16,6 +16,7 @@ npm run lint         # ESLint
 npm start            # Start production server
 node scripts/seed-admin.mjs      # Seed first admin user (requires .env.local)
 node scripts/seed-members.mjs    # Import the real member roster
+node scripts/import-history.mjs  # Historical xlsx ledger import (--parse-only / --dry-run / --write / --emulator)
 ```
 
 ## Architecture
@@ -48,9 +49,13 @@ node scripts/seed-members.mjs    # Import the real member roster
 - **Total Group Funds** = Cash on Hand + Bank Balance + Investments Value
 - **AGM Party Fund** = opening balance + meeting-fee contributions − "AGM Party" expenses (informational subset of the buckets above, not additive)
 
+### Group Year & Contribution Rates
+
+The financial year runs **July–June** (`src/lib/groupYear.ts` — `groupYearForMonth`, `rateFor`, etc.). Monthly contribution rates are **per group year** (`Settings.contributionRates['2025/2026'] = { primary, secondary }`), editable in Settings; the legacy flat fields mirror the current year for back-compat. From `Settings.autoDuesFrom` (the AGM month, '2026-10') onward, `src/lib/use-auto-dues.ts` auto-generates the current month's dues on any logged-in visit (deterministic doc IDs `auto-<month>-<memberId>` make it race-safe). Months before that are backfilled by the treasurer via the Contributions **Months → Ledger Entry** flow: pre-automation unpaid months are saved as `Late` with the fine as entered (the sweep can't touch them); automation-era months save as `Unpaid` and the sweep applies the constitutional fine past the cutoff.
+
 ### Auto-Fining
 
-`src/lib/fines.ts` computes whether a monthly contribution is overdue (unpaid/pending past the `contributionCutoffDay`-th of the following month, default the 5th). `contributions.tsx` runs this sweep client-side on load and flips overdue records to `Late` with the configured fine — this is the MVP stand-in for the scheduled Cloud Function the plan describes; it fires whenever any logged-in user visits Contributions, not on a fixed clock. Migrating it to an actual Cloud Function is the natural next step before this is a system of record the treasurer relies on unattended.
+`src/lib/fines.ts` computes whether a monthly contribution is overdue (unpaid/pending past the `contributionCutoffDay`-th of the following month, default the 5th). `contributions.tsx` runs this sweep client-side on load and flips overdue records to `Late` with the configured fine — it fires whenever any logged-in user visits Contributions, not on a fixed clock. Same pattern as the dues auto-generation above; migrating both to a scheduled Cloud Function is the natural next step if the group ever moves to Firebase Blaze billing.
 
 ### Page → Component Mapping
 
@@ -65,7 +70,7 @@ The whole UI is built on Tailwind's `amber-*` utility classes (inherited from th
 - **No record deletion** — audit trail requirement. Firestore rules deny `delete` on every collection.
 - **Kenya locale** — phone numbers +254, currency KES, no currency conversion.
 - **No member loans in v1** — deliberately out of scope (group decision); don't add a loans module without checking `PLAN.md` Section F/N first.
-- **PWA** — service worker at `public/sw.js` (cache name `ambitious-v1`), manifest at `public/manifest.json`. Icons are rebranded SVGs in `public/icons/`; the PNG icons (`icon-192.png`, `icon-512.png`, `apple-touch-icon.png`) are still the old zebra artwork and are excluded from the manifest for now — regenerate them before relying on the PNG/Apple touch icon paths.
+- **PWA** — service worker at `public/sw.js` (cache name `ambitious-v1`, stamped `ambitious-<sha>` at deploy by `scripts/stamp-sw-cache.mjs`), manifest at `public/manifest.json`. Icons are navy/gold SVGs with a vector seedling in `public/icons/`; the PNGs (`icon-192.png`, `icon-512.png`, `apple-touch-icon.png`) are regenerated from the SVGs via sharp (`node -e "import('sharp')…"` — sharp ships with next) — regenerate them if the SVGs change.
 - **Phone format normalization** — `0712...` → `+254712...`, `254712...` → `+254712...`.
 
 ## Environment Setup
@@ -74,6 +79,6 @@ Copy `.env.local.example` to `.env.local` and fill Firebase credentials. Without
 
 ## Known Follow-ups (not yet done)
 
-- Deploy scripts (`scripts/deploy-remote.sh`, `recover-vps.sh`, `vps-fix.sh`) and `ecosystem.config.cjs` still reference the old VPS path pattern — update before using them for this project.
 - Market-data (stocks/forex/crypto) integration is Phase 2 per `PLAN.md` Section G — not built. NSE stock pricing specifically has no confirmed free source yet.
 - M-Pesa verification is manual code entry + treasurer sign-off, not a Daraja API integration (deliberate — see PLAN.md Section N).
+- Dues generation + fine sweep are client-side (any member visit triggers them). A scheduled Cloud Function would make them clock-driven — needs Firebase Blaze billing, deliberately deferred.

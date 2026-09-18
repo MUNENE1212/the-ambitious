@@ -6,6 +6,11 @@
     </linearGradient>
   </defs>
   <rect width="512" height="512" rx="80" fill="url(#bg512)"/>
-  <text x="256" y="265" font-size="230" text-anchor="middle" dominant-baseline="middle">&#x1F331;</text>
-  <text x="256" y="425" font-size="64" text-anchor="middle" fill="#e0ac4e" font-family="Arial,sans-serif" font-weight="bold">Y&amp;A</text>
+  <!-- Seedling sprout (vector — renders identically everywhere, no emoji font needed) -->
+  <g>
+    <path d="M256 320 V 208" fill="none" stroke="#e0ac4e" stroke-width="16" stroke-linecap="round"/>
+    <path d="M256 208 C 230 158 182 146 152 158 C 158 204 208 226 256 208 Z" fill="#e0ac4e"/>
+    <path d="M256 208 C 282 158 330 146 360 158 C 354 204 304 226 256 208 Z" fill="#e0ac4e"/>
+  </g>
+  <text x="256" y="430" font-size="72" text-anchor="middle" fill="#e0ac4e" font-family="Arial,sans-serif" font-weight="bold">Y&amp;A</text>
 </svg>

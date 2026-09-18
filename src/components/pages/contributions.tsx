@@ -1,24 +1,38 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, orderBy, onSnapshot, getDocs, where, addDoc, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Contribution, Member, hydrateMember, hydrateContribution } from '@/lib/types';
+import { Contribution, ContributionStatus, Member, PaymentMethod, hydrateMember, hydrateContribution } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import { useSettings } from '@/lib/hooks';
 import { canVerifyPayments, isSavingsGroupMember } from '@/lib/roles';
 import { extractMpesaCode } from '@/lib/mpesa';
-import { findOverdueContributions } from '@/lib/fines';
+import { contributionCutoffDate, findOverdueContributions } from '@/lib/fines';
+import { currentGroupYear, currentMonthKey, groupYearForMonth, groupYearLabel, monthsInGroupYear, rateFor } from '@/lib/groupYear';
 import { formatKES } from '@/lib/financial';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Modal } from '@/components/ui/modal';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import { Loading } from '@/components/ui/loading';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
+
+interface LedgerRow {
+  member: Member;
+  existing?: Contribution;
+  mode: 'skip' | 'paid' | 'unpaid';
+  amount: string;
+  fine: string;
+  method: PaymentMethod;
+  code: string;
+  paidDate: string;
+}
 
 export function ContributionsContent() {
   const { user } = useAuth();
@@ -42,6 +56,13 @@ export function ContributionsContent() {
   const [generating, setGenerating] = useState(false);
   const canVerify = canVerifyPayments(user);
   const fineCheckDone = useRef(false);
+
+  // Month manager + ledger entry (treasurer backfill)
+  const [showMonths, setShowMonths] = useState(false);
+  const [showLedger, setShowLedger] = useState(false);
+  const [ledgerMonth, setLedgerMonth] = useState<string | null>(null);
+  const [ledgerRows, setLedgerRows] = useState<LedgerRow[]>([]);
+  const [savingLedger, setSavingLedger] = useState(false);
 
   useEffect(() => {
     const unsubs: (() => void)[] = [];
@@ -73,34 +94,36 @@ export function ContributionsContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, contributions]);
 
-  const generateMonthly = async () => {
+  const activeMembers = members.filter(m => m.active && isSavingsGroupMember(m));
+
+  /** Generate monthly dues for ANY month at that group year's rate (fills missing members). */
+  const generateForMonth = async (month: string) => {
     if (!canVerify) return;
     setGenerating(true);
     try {
-      const month = format(new Date(), 'yyyy-MM');
-      const existing = await getDocs(
-        query(collection(db, 'contributions'), where('month', '==', month), where('purpose', '==', 'monthly'))
-      );
-      if (!existing.empty) {
-        showToast('Monthly dues already generated for this month', 'info');
+      const existing = contributions.filter(c => c.purpose === 'monthly' && c.month === month);
+      const existingIds = new Set(existing.map(c => c.memberId));
+      const missing = activeMembers.filter(m => !existingIds.has(m.id));
+      if (missing.length === 0) {
+        showToast(`All ${existing.length} records already exist for ${format(new Date(month + '-01'), 'MMMM yyyy')}`, 'info');
         setGenerating(false);
         return;
       }
-      const activeMembers = members.filter(m => m.active && isSavingsGroupMember(m));
-      for (const member of activeMembers) {
+      const { primary, secondary } = rateFor(settings, month);
+      for (const member of missing) {
         await addDoc(collection(db, 'contributions'), {
           memberId: member.id,
           memberName: member.name,
           purpose: 'monthly',
           month,
-          amount: member.secondary ? settings.monthlyContributionSecondary : settings.monthlyContributionPrimary,
+          amount: member.secondary ? secondary : primary,
           fineAmount: 0,
           status: 'Unpaid',
           createdAt: Date.now(),
           updatedAt: Date.now(),
         });
       }
-      showToast(`Generated ${activeMembers.length} monthly dues records`);
+      showToast(`Generated ${missing.length} dues records for ${format(new Date(month + '-01'), 'MMMM yyyy')}`);
     } catch {
       showToast('Failed to generate', 'error');
     }
@@ -112,7 +135,6 @@ export function ContributionsContent() {
     setGenerating(true);
     try {
       const month = format(new Date(), 'yyyy-MM');
-      const activeMembers = members.filter(m => m.active && isSavingsGroupMember(m));
       for (const member of activeMembers) {
         await addDoc(collection(db, 'contributions'), {
           memberId: member.id,
@@ -131,6 +153,101 @@ export function ContributionsContent() {
       showToast('Failed to generate', 'error');
     }
     setGenerating(false);
+  };
+
+  /** Open the per-month ledger entry sheet, prefilled from existing records + that year's rate. */
+  const openLedger = (month: string) => {
+    setLedgerMonth(month);
+    const { primary, secondary } = rateFor(settings, month);
+    const rows: LedgerRow[] = activeMembers.map(member => {
+      const existing = contributions.find(
+        c => c.purpose === 'monthly' && c.month === month && c.memberId === member.id
+      );
+      return {
+        member,
+        existing,
+        mode: existing ? (existing.status === 'Paid' ? 'paid' : 'unpaid') : 'skip',
+        amount: (existing?.amount ?? (member.secondary ? secondary : primary)).toString(),
+        fine: (existing?.fineAmount ?? 0).toString(),
+        method: existing?.paymentMethod ?? 'Cash',
+        code: existing?.mpesaCode ?? '',
+        paidDate: existing?.paidDate ?? '',
+      };
+    });
+    setLedgerRows(rows);
+    setShowMonths(false);
+    setShowLedger(true);
+  };
+
+  const updateRow = (idx: number, patch: Partial<LedgerRow>) => {
+    setLedgerRows(prev => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  };
+
+  /**
+   * Save & confirm the month. Status rules for unpaid rows:
+   *  - months before `autoDuesFrom` (paper era) → 'Late' with the entered fine
+   *    (closed history; the auto-fine sweep ignores non-Unpaid records)
+   *  - automation-era months past their cutoff → 'Late' + constitutional fine (same as the sweep)
+   *  - otherwise → 'Unpaid' (the sweep will fine it if it becomes overdue)
+   */
+  const saveLedger = async () => {
+    if (!user || !ledgerMonth) return;
+    setSavingLedger(true);
+    const cutoffPassed = new Date() > contributionCutoffDate(ledgerMonth, settings.contributionCutoffDay);
+    let written = 0;
+    try {
+      for (const row of ledgerRows) {
+        if (row.mode === 'skip') continue;
+        const amount = parseFloat(row.amount) || 0;
+        const fine = parseFloat(row.fine) || 0;
+
+        let status: ContributionStatus;
+        let extra: Record<string, unknown>;
+        if (row.mode === 'paid') {
+          status = 'Paid';
+          extra = {
+            paymentMethod: row.method,
+            mpesaCode: row.code.trim() || null,
+            mpesaMessage: row.existing?.mpesaMessage ?? (row.code.trim() ? undefined : 'Entered by treasurer via Ledger Entry'),
+            paidDate: row.paidDate || null,
+            recordedBy: row.existing?.recordedBy ?? user.id,
+          };
+        } else if (ledgerMonth < settings.autoDuesFrom) {
+          status = 'Late';
+          extra = { fineAmount: fine, mpesaCode: null, paidDate: null, paymentMethod: null };
+        } else if (cutoffPassed) {
+          status = 'Late';
+          extra = { fineAmount: settings.lateContributionFine, mpesaCode: null, paidDate: null, paymentMethod: null };
+        } else {
+          status = 'Unpaid';
+          extra = { fineAmount: fine, mpesaCode: null, paidDate: null, paymentMethod: null };
+        }
+
+        const base = {
+          memberId: row.member.id,
+          memberName: row.member.name,
+          purpose: 'monthly' as const,
+          month: ledgerMonth,
+          amount,
+          fineAmount: fine,
+          updatedAt: Date.now(),
+        };
+
+        if (row.existing) {
+          await updateDoc(doc(db, 'contributions', row.existing.id), { ...base, status, ...extra });
+        } else {
+          await addDoc(collection(db, 'contributions'), { ...base, status, ...extra, createdAt: Date.now() });
+        }
+        written++;
+      }
+      showToast(written === 0 ? 'Nothing to save — all rows skipped' : `Ledger confirmed — ${written} record${written === 1 ? '' : 's'} saved`);
+      setShowLedger(false);
+      setLedgerMonth(null);
+      setLedgerRows([]);
+    } catch {
+      showToast('Failed to save ledger', 'error');
+    }
+    setSavingLedger(false);
   };
 
   const handleSubmitPayment = async (e: React.FormEvent) => {
@@ -232,6 +349,16 @@ export function ContributionsContent() {
 
   const pendingItems = currentContribs.filter(c => c.status === 'Pending');
 
+  // Months grouped under group-year (Jul–Jun) section headers
+  const fySections = new Map<string, Map<string, Contribution[]>>();
+  Array.from(months.entries())
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .forEach(([month, contribs]) => {
+      const fy = groupYearForMonth(month);
+      if (!fySections.has(fy)) fySections.set(fy, new Map());
+      fySections.get(fy)!.set(month, contribs);
+    });
+
   return (
     <div className="p-4 space-y-4">
       <div className="flex bg-stone-100 rounded-lg p-1">
@@ -261,10 +388,11 @@ export function ContributionsContent() {
               {unpaidCount > 0 && <span>{unpaidCount} unpaid</span>}
             </div>
           </div>
-          {canVerify && (
-            <Button onClick={activeTab === 'monthly' ? generateMonthly : generateMeetingFee} loading={generating} size="sm">
-              {activeTab === 'monthly' ? 'Generate Month' : 'Generate Fee'}
-            </Button>
+          {canVerify && activeTab === 'monthly' && (
+            <Button onClick={() => setShowMonths(true)} size="sm">Months</Button>
+          )}
+          {canVerify && activeTab === 'meetingFee' && (
+            <Button onClick={generateMeetingFee} loading={generating} size="sm">Generate Fee</Button>
           )}
         </div>
         {activeTab === 'meetingFee' && (
@@ -302,28 +430,63 @@ export function ContributionsContent() {
       {currentContribs.length === 0 ? (
         <EmptyState
           title={activeTab === 'monthly' ? 'No monthly dues' : 'No meeting-fee records'}
-          description={canVerify ? 'Generate records to get started' : 'Nothing generated yet — check back soon'}
+          description={canVerify ? 'Open Months to generate or backfill records' : 'Nothing generated yet — check back soon'}
         />
       ) : (
-        Array.from(months.entries())
-          .sort((a, b) => b[0].localeCompare(a[0]))
-          .map(([month, contribs]) => (
-            <Card key={month} title={format(new Date(month + '-01'), 'MMMM yyyy')}>
-              <div className="space-y-2">
-                {contribs.map(c => (
-                  <ContributionRow
-                    key={c.id}
-                    contribution={c}
-                    isOwn={c.memberId === user?.id}
-                    canVerify={canVerify}
-                    onSubmit={() => { setSelectedContrib(c); setShowSubmitModal(true); }}
-                    onVerify={() => { setVerifyContrib(c); setShowVerifyModal(true); }}
-                  />
-                ))}
-              </div>
-            </Card>
-          ))
+        Array.from(fySections.entries()).map(([fy, fyMonths]) => (
+          <div key={fy} className="space-y-4">
+            <div className="flex items-center gap-2 pt-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-amber-700">{groupYearLabel(fy)}</span>
+              <span className="flex-1 h-px bg-amber-200" />
+            </div>
+            {Array.from(fyMonths.entries()).map(([month, contribs]) => (
+              <Card
+                key={month}
+                title={format(new Date(month + '-01'), 'MMMM yyyy')}
+                action={
+                  canVerify ? (
+                    <button onClick={() => openLedger(month)} className="text-xs text-amber-700 font-medium">Ledger</button>
+                  ) : undefined
+                }
+              >
+                <div className="space-y-2">
+                  {contribs.map(c => (
+                    <ContributionRow
+                      key={c.id}
+                      contribution={c}
+                      isOwn={c.memberId === user?.id}
+                      canVerify={canVerify}
+                      onSubmit={() => { setSelectedContrib(c); setShowSubmitModal(true); }}
+                      onVerify={() => { setVerifyContrib(c); setShowVerifyModal(true); }}
+                    />
+                  ))}
+                </div>
+              </Card>
+            ))}
+          </div>
+        ))
       )}
+
+      <MonthManager
+        open={showMonths}
+        onClose={() => setShowMonths(false)}
+        contributions={contributions}
+        activeCount={activeMembers.length}
+        onGenerate={generateForMonth}
+        onOpenLedger={openLedger}
+        generating={generating}
+      />
+
+      <LedgerEntryModal
+        open={showLedger}
+        month={ledgerMonth}
+        rows={ledgerRows}
+        autoDuesFrom={settings.autoDuesFrom}
+        saving={savingLedger}
+        onClose={() => { setShowLedger(false); setLedgerMonth(null); setLedgerRows([]); }}
+        onUpdate={updateRow}
+        onSave={saveLedger}
+      />
 
       <Modal
         open={showSubmitModal}
@@ -400,6 +563,160 @@ export function ContributionsContent() {
         )}
       </Modal>
     </div>
+  );
+}
+
+/** Group-year → month grid with generate + ledger entry actions (treasurer backfill). */
+function MonthManager({
+  open, onClose, contributions, activeCount, onGenerate, onOpenLedger, generating,
+}: {
+  open: boolean;
+  onClose: () => void;
+  contributions: Contribution[];
+  activeCount: number;
+  onGenerate: (month: string) => Promise<void>;
+  onOpenLedger: (month: string) => void;
+  generating: boolean;
+}) {
+  const [year, setYear] = useState(currentGroupYear());
+
+  const dataYears = contributions
+    .filter(c => c.purpose === 'monthly')
+    .map(c => groupYearForMonth(c.month));
+  const currentStart = parseInt(currentGroupYear().split('/')[0], 10);
+  const years = Array.from(new Set([
+    ...dataYears,
+    `${currentStart - 1}/${currentStart}`,
+    `${currentStart}/${currentStart + 1}`,
+  ])).sort((a, b) => parseInt(b.split('/')[0], 10) - parseInt(a.split('/')[0], 10));
+
+  const nowKey = currentMonthKey();
+
+  return (
+    <Modal open={open} onClose={onClose} title="Monthly Dues by Group Year">
+      <div className="space-y-4">
+        <div className="flex flex-wrap gap-2">
+          {years.map(y => (
+            <button
+              key={y}
+              onClick={() => setYear(y)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors
+                ${y === year ? 'bg-amber-700 text-white' : 'bg-stone-100 text-stone-600'}`}
+            >
+              {groupYearLabel(y)}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-stone-400">
+          Generate the month&apos;s dues for every active member, or open Ledger Entry to record who paid
+          from the paper record. From the automation month the app generates dues by itself.
+        </p>
+        <div className="space-y-2">
+          {monthsInGroupYear(year).map(month => {
+            const recs = contributions.filter(c => c.purpose === 'monthly' && c.month === month);
+            const paid = recs.filter(c => c.status === 'Paid').length;
+            const isFuture = month > nowKey;
+            return (
+              <div key={month} className={`flex items-center justify-between rounded-lg border border-stone-100 p-3 ${isFuture ? 'opacity-50' : ''}`}>
+                <div>
+                  <p className="text-sm font-medium text-stone-700">{format(new Date(month + '-01'), 'MMM yyyy')}</p>
+                  <p className="text-xs text-stone-400">
+                    {isFuture ? 'Upcoming' : recs.length === 0 ? 'Not generated' : `${paid}/${recs.length} paid${recs.length < activeCount ? ` · ${activeCount - recs.length} members missing` : ''}`}
+                  </p>
+                </div>
+                {!isFuture && (
+                  <div className="flex gap-2">
+                    {(recs.length === 0 || recs.length < activeCount) && (
+                      <Button size="sm" variant="secondary" loading={generating} onClick={() => onGenerate(month)}>
+                        {recs.length === 0 ? 'Generate' : 'Fill'}
+                      </Button>
+                    )}
+                    <Button size="sm" onClick={() => onOpenLedger(month)}>Ledger</Button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** Per-month ledger sheet: mark each member paid/unpaid from the paper record, then confirm. */
+function LedgerEntryModal({
+  open, month, rows, autoDuesFrom, saving, onClose, onUpdate, onSave,
+}: {
+  open: boolean;
+  month: string | null;
+  rows: LedgerRow[];
+  autoDuesFrom: string;
+  saving: boolean;
+  onClose: () => void;
+  onUpdate: (idx: number, patch: Partial<LedgerRow>) => void;
+  onSave: () => Promise<void>;
+}) {
+  const paperEra = month !== null && month < autoDuesFrom;
+  return (
+    <Modal open={open} onClose={onClose} title={month ? `Ledger — ${format(new Date(month + '-01'), 'MMMM yyyy')}` : 'Ledger'}>
+      <div className="space-y-4">
+        <p className="text-xs text-stone-400">
+          Enter each member&apos;s outcome for this month, then confirm. Rows on <span className="font-medium">Skip</span> are
+          left untouched.{' '}
+          {paperEra
+            ? 'Unpaid entries are recorded as Late with the fine you enter (closed, pre-automation month — no automatic fines).'
+            : 'Unpaid entries are recorded as Unpaid; the app applies the constitutional late fine automatically once the cutoff passes.'}
+        </p>
+        {rows.map((row, idx) => (
+          <div key={row.member.id} className="rounded-lg border border-stone-100 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-stone-700">
+                {row.member.name}
+                {row.member.secondary && <span className="ml-1 text-xs text-amber-600">(secondary)</span>}
+              </p>
+              <div className="flex bg-stone-100 rounded-lg p-0.5">
+                {(['skip', 'paid', 'unpaid'] as const).map(mode => (
+                  <button
+                    key={mode}
+                    onClick={() => onUpdate(idx, { mode })}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-md capitalize transition-colors
+                      ${row.mode === mode
+                        ? mode === 'paid' ? 'bg-emerald-600 text-white' : mode === 'unpaid' ? 'bg-red-500 text-white' : 'bg-white text-stone-600 shadow-sm'
+                        : 'text-stone-400'}`}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {row.mode !== 'skip' && (
+              <div className="grid grid-cols-2 gap-2">
+                <Input label="Amount" type="number" inputMode="numeric" value={row.amount} onChange={e => onUpdate(idx, { amount: e.target.value })} />
+                <Input label="Fine" type="number" inputMode="numeric" value={row.fine} onChange={e => onUpdate(idx, { fine: e.target.value })} />
+                {row.mode === 'paid' && (
+                  <>
+                    <Select
+                      label="Method"
+                      value={row.method}
+                      onChange={e => onUpdate(idx, { method: e.target.value as PaymentMethod })}
+                      options={[{ value: 'Cash', label: 'Cash' }, { value: 'Mpesa', label: 'M-Pesa' }]}
+                    />
+                    <Input label="Paid date" type="date" value={row.paidDate} onChange={e => onUpdate(idx, { paidDate: e.target.value })} />
+                    <div className="col-span-2">
+                      <Input label="M-Pesa code (optional)" placeholder="e.g. SLK7A2B9CD" value={row.code} onChange={e => onUpdate(idx, { code: e.target.value })} />
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+        <div className="flex gap-2">
+          <Button type="button" variant="secondary" onClick={onClose} className="flex-1">Cancel</Button>
+          <Button type="button" loading={saving} onClick={onSave} className="flex-1">Save &amp; Confirm</Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

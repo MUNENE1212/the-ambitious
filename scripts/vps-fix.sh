@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
-# Diagnose and bring kuku-egg-tracker back online in IN-PLACE layout
+# Diagnose and bring the-ambitious back online in IN-PLACE layout
 # (the layout that was working before atomic deploys were attempted).
 #
 # Run as root or with sudo. Safe to run multiple times.
 # Will NOT touch other services or other PM2 apps.
 
 set +e
-APP_DIR=/opt/kuku-egg-tracker
-APP_NAME=kuku-egg-tracker
-PORT=3004
+APP_DIR=/opt/the-ambitious
+APP_NAME=the-ambitious
+PORT=3005
 HEALTH_URL="http://127.0.0.1:${PORT}/"
 
 echo "=== 1. Current state ==="
 echo "-- top of $APP_DIR --"
 ls -la "$APP_DIR/" 2>&1 | head -20
 echo ""
-echo "-- /opt/kuku-egg-tracker/current --"
+echo "-- /opt/the-ambitious/current --"
 ls -la "$APP_DIR/current" 2>&1
 echo ""
-echo "-- /opt/kuku-egg-tracker/releases/ --"
+echo "-- /opt/the-ambitious/releases/ --"
 ls -la "$APP_DIR/releases/" 2>&1 | head -10
 echo ""
 echo "-- PM2 status --"

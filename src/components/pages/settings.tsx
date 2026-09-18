@@ -6,6 +6,7 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/lib/auth-context';
 import { useSettings } from '@/lib/hooks';
 import { DEFAULT_EXPENSE_CATEGORIES } from '@/lib/constants';
+import { currentGroupYear, recentGroupYears } from '@/lib/groupYear';
 import { canAdminister } from '@/lib/roles';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
@@ -30,6 +31,13 @@ export function SettingsContent() {
   const val = (key: string, settingsValue: string) => overrides[key] ?? settingsValue;
   const set = (key: string) => (e: React.ChangeEvent<HTMLInputElement>) => setOverrides(prev => ({ ...prev, [key]: e.target.value }));
 
+  // Group years with editable rates: the two around the current one plus any
+  // year already recorded in settings (e.g. rates set at a previous AGM).
+  const rateYears = Array.from(new Set([
+    ...Object.keys(settings.contributionRates ?? {}),
+    ...recentGroupYears(),
+  ])).sort();
+
   const addCategory = () => {
     const name = newCategory.trim();
     if (!name) return;
@@ -49,16 +57,31 @@ export function SettingsContent() {
 
     setSaving(true);
     try {
+      // Per-group-year rates, seeded from current settings, overridden by the form
+      const rates: Record<string, { primary: number; secondary: number }> = {};
+      for (const yr of rateYears) {
+        const existing = settings.contributionRates?.[yr];
+        rates[yr] = {
+          primary: parseFloat(v(`rate-${yr}-primary`, (existing?.primary ?? 0).toString())) || 0,
+          secondary: parseFloat(v(`rate-${yr}-secondary`, (existing?.secondary ?? 0).toString())) || 0,
+        };
+      }
+      // Mirror the current group year's rate into the legacy flat fields
+      const currentRate = rates[currentGroupYear()]
+        ?? { primary: settings.monthlyContributionPrimary, secondary: settings.monthlyContributionSecondary };
+
       const data: Record<string, unknown> = {
         groupName: v('groupName', settings.groupName).trim() || settings.groupName,
         groupShortName: v('groupShortName', settings.groupShortName).trim() || settings.groupShortName,
 
         entryFee: parseFloat(v('entryFee', settings.entryFee.toString())) || 0,
-        monthlyContributionPrimary: parseFloat(v('monthlyPrimary', settings.monthlyContributionPrimary.toString())) || 0,
-        monthlyContributionSecondary: parseFloat(v('monthlySecondary', settings.monthlyContributionSecondary.toString())) || 0,
+        monthlyContributionPrimary: currentRate.primary,
+        monthlyContributionSecondary: currentRate.secondary,
+        contributionRates: rates,
         meetingFee: parseFloat(v('meetingFee', settings.meetingFee.toString())) || 0,
         memberCap: parseInt(v('memberCap', settings.memberCap.toString())) || settings.memberCap,
 
+        autoDuesFrom: v('autoDuesFrom', settings.autoDuesFrom).trim() || settings.autoDuesFrom,
         contributionCutoffDay: parseInt(v('cutoffDay', settings.contributionCutoffDay.toString())) || settings.contributionCutoffDay,
         lateContributionFine: parseFloat(v('lateFine', settings.lateContributionFine.toString())) || 0,
         virtualAbsenceFine: parseFloat(v('virtualFine', settings.virtualAbsenceFine.toString())) || 0,
@@ -112,10 +135,47 @@ export function SettingsContent() {
           <div className="space-y-4">
             <p className="text-sm font-medium text-stone-700">Membership &amp; Dues</p>
             <Input label="Entry Fee — Murangano (KES)" type="number" inputMode="numeric" value={val('entryFee', settings.entryFee.toString())} onChange={set('entryFee')} />
-            <Input label="Monthly Contribution — Primary Member (KES)" type="number" inputMode="numeric" value={val('monthlyPrimary', settings.monthlyContributionPrimary.toString())} onChange={set('monthlyPrimary')} />
-            <Input label="Monthly Contribution — Secondary/Minor Member (KES)" type="number" inputMode="numeric" value={val('monthlySecondary', settings.monthlyContributionSecondary.toString())} onChange={set('monthlySecondary')} />
+            <div className="space-y-2">
+              <p className="text-xs text-stone-400">Monthly contribution rates per group year (July–June). Members who are secondary/minors pay the secondary rate.</p>
+              {rateYears.map(yr => (
+                <div key={yr} className="space-y-2 rounded-lg border border-stone-100 p-3">
+                  <p className="text-sm font-medium text-stone-700">{yr}{yr === currentGroupYear() && <span className="ml-1 text-xs text-amber-600">(current)</span>}</p>
+                  <Input
+                    label="Primary Member (KES)"
+                    type="number"
+                    inputMode="numeric"
+                    value={val(`rate-${yr}-primary`, (settings.contributionRates?.[yr]?.primary ?? 0).toString())}
+                    onChange={set(`rate-${yr}-primary`)}
+                  />
+                  <Input
+                    label="Secondary/Minor Member (KES)"
+                    type="number"
+                    inputMode="numeric"
+                    value={val(`rate-${yr}-secondary`, (settings.contributionRates?.[yr]?.secondary ?? 0).toString())}
+                    onChange={set(`rate-${yr}-secondary`)}
+                  />
+                </div>
+              ))}
+            </div>
             <Input label="Meeting Fee — AGM Party Fund (KES)" type="number" inputMode="numeric" value={val('meetingFee', settings.meetingFee.toString())} onChange={set('meetingFee')} />
             <Input label="Member Cap" type="number" inputMode="numeric" value={val('memberCap', settings.memberCap.toString())} onChange={set('memberCap')} />
+          </div>
+        </Card>
+
+        <Card>
+          <div className="space-y-4">
+            <p className="text-sm font-medium text-stone-700">Automation</p>
+            <Input
+              label="Auto-generate monthly dues from"
+              type="month"
+              value={val('autoDuesFrom', settings.autoDuesFrom)}
+              onChange={set('autoDuesFrom')}
+            />
+            <p className="text-xs text-stone-400">
+              From this month onward the app generates each month&apos;s dues automatically on first
+              visit. Months before it are entered manually by the treasurer (Ledger Entry).
+              Set to the AGM month — {'2026-10'} for the 2026/27 year.
+            </p>
           </div>
         </Card>
 

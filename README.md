@@ -7,7 +7,7 @@ See [`PLAN.md`](./PLAN.md) for the full product/technical blueprint this build f
 ## Features
 
 - **Home** — animated funds hero, a "What's your idea?" composer, pinned leadership Announcements, and an unhidden feed of recent forum posts/replies
-- **Contributions** — monthly dues and meeting fees, M-Pesa code submission + one-tap treasurer verification, automatic late-fine sweep (constitution: cutoff is the 5th of the following month)
+- **Contributions** — monthly dues grouped by group year (July–June) with per-year rates, a treasurer Ledger Entry screen for backfilling paper months, M-Pesa code submission + one-tap treasurer verification, automatic late-fine sweep (constitution: cutoff is the 5th of the following month), and automatic dues generation from the AGM month onward
 - **Funds** — cash/bank/investments overview, Expenses, Bank transactions, the ring-fenced AGM Party Fund, and an Investments ledger
 - **Forum** — Observation / Proposal / Opportunity / Question / Report / General / Announcement categories, with office-bearer title badges and leadership-only Announcements open to member comments
 - **Meeting Minutes** — draft/official minutes, attendance capture, and a one-tap "Apply Absence Fines" action for the discipline master
@@ -60,11 +60,30 @@ node scripts/seed-members.mjs    # imports the real 13-member roster from APRIL2
 
 Change the admin credentials after first login, and have an admin fix each seeded member's real phone number and assign office-bearer titles from the Admin screen.
 
-### 5. Deploy Firestore Rules
+### 5. Import the Historical Ledgers (one-time)
+
+```bash
+node scripts/import-history.mjs --parse-only   # parse the xlsx files, no Firebase access — sanity check
+node scripts/import-history.mjs                # dry-run against Firestore: matches names, skips duplicates, prints reconciliation
+node scripts/import-history.mjs --write        # commit (add --emulator to target the local Firebase emulator instead)
+```
+
+Imports three years of contributions (FY 2023/24 → 2025/26 through April 2026) from the paper workbooks plus both expenses workbooks, preserving exact amounts and fines. The dry-run report explains the opening balances to enter in Settings (the pre-July-2023 position, including the paper ledger's own gaps).
+
+### 6. Deploy Firestore Rules
 
 ```bash
 npx firebase-tools deploy --only firestore:rules
 ```
+
+## Launch Runbook (2026/27 kickoff)
+
+1. **One-time VPS prep**: `mkdir -p /opt/the-ambitious` (CI deploys there, port 3005, PM2 app `the-ambitious`).
+2. Seed admin + members; set real phone numbers and office-bearer titles from Admin.
+3. Settings → set per-year contribution rates (2025/2026 and 2026/2027), confirm `autoDuesFrom` is `2026-10` (the AGM month), and enter opening balances from the import report's reconciliation line.
+4. Run the ledger import (dry-run first, then `--write`).
+5. Contributions → **Months → Ledger Entry**: enter and confirm May/June 2026 (the paper's blank months) and July–September 2026.
+6. From **October 2026 (AGM)** the app runs itself: dues auto-generate on the first visit each month, and unpaid dues flip to `Late` with the constitutional fine after the 5th of the following month.
 
 ## Architecture
 

@@ -39,14 +39,14 @@ service cloud.firestore {
     // Expenses
     match /expenses/{expenseId} {
       allow read: if true;
-      allow create: if true;
+      allow create, update: if true;
       allow delete: if false;
     }
 
     // Bank transactions
     match /bankTransactions/{txId} {
       allow read: if true;
-      allow create: if true;
+      allow create, update: if true;
       allow delete: if false;
     }
 

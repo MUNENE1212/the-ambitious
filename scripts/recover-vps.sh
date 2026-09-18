@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Recovery: bring the kuku-egg-tracker app back online after a broken deploy.
+# Recovery: bring the the-ambitious app back online after a broken deploy.
 # Run as root or with sudo. Safe to run multiple times.
 #
 # This restores the in-place layout the app used before atomic deploys were
@@ -8,9 +8,9 @@
 
 set -euo pipefail
 
-APP_DIR=/opt/kuku-egg-tracker
-APP_NAME=kuku-egg-tracker
-PORT=3004
+APP_DIR=/opt/the-ambitious
+APP_NAME=the-ambitious
+PORT=3005
 HEALTH_URL="http://127.0.0.1:${PORT}/"
 
 echo "=== Stopping PM2 ==="
@@ -38,12 +38,12 @@ cat > "$APP_DIR/ecosystem.config.cjs" <<'EOF'
 module.exports = {
   apps: [
     {
-      name: 'kuku-egg-tracker',
+      name: 'the-ambitious',
       script: '.next/standalone/server.js',
-      cwd: '/opt/kuku-egg-tracker',
+      cwd: '/opt/the-ambitious',
       env: {
         NODE_ENV: 'production',
-        PORT: 3004,
+        PORT: 3005,
       },
       instances: 1,
       autorestart: true,

@@ -11,11 +11,16 @@ export const DEFAULT_SETTINGS: Settings = {
   groupShortName: 'Y&A',
 
   entryFee: 5000,
-  monthlyContributionPrimary: 500,
+  monthlyContributionPrimary: 600,
   monthlyContributionSecondary: 900,
+  contributionRates: {
+    '2025/2026': { primary: 600, secondary: 900 },
+    '2026/2027': { primary: 600, secondary: 900 },
+  },
   meetingFee: 100,
   memberCap: 20,
 
+  autoDuesFrom: '2026-10',
   contributionCutoffDay: 5,
   lateContributionFine: 200,
   virtualAbsenceFine: 500,

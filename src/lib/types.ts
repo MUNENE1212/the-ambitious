@@ -306,10 +306,16 @@ export interface Settings {
 
   // Membership & dues (Constitution Sections B, J)
   entryFee: number;
-  monthlyContributionPrimary: number;
+  monthlyContributionPrimary: number; // legacy flat rate — mirrors current group year (kept for back-compat)
   monthlyContributionSecondary: number;
+  contributionRates: Record<string, { primary: number; secondary: number }>; // keyed by group year 'YYYY/YYYY' (Jul–Jun)
   meetingFee: number;
   memberCap: number;
+
+  // Automation — first month ('YYYY-MM') the app auto-generates monthly dues.
+  // Set to the AGM month of the 2026/27 year ('2026-10'); earlier months are
+  // entered manually by the treasurer via the Ledger Entry screen.
+  autoDuesFrom: string;
 
   // Fines & penalties (Constitution "Fines and Penalties")
   contributionCutoffDay: number; // day of the FOLLOWING month a monthly contribution is due by

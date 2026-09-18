@@ -10,6 +10,7 @@ import {
 import { useAuth } from '@/lib/auth-context';
 import { useSettings } from '@/lib/hooks';
 import { calculateFinancials, formatKES } from '@/lib/financial';
+import { currentGroupYear, groupYearStartKey } from '@/lib/groupYear';
 import { useToast } from '@/components/ui/toast';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -39,13 +40,6 @@ function daysUntilAnnual(mmdd: string): number {
   let target = new Date(now.getFullYear(), month - 1, day);
   if (target < now) target = new Date(now.getFullYear() + 1, month - 1, day);
   return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-}
-
-/** Fiscal year (Jul–Jun) start key, matching the group's existing ledger convention. */
-function fiscalYearStartKey(): string {
-  const now = new Date();
-  const fyStartYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
-  return format(new Date(fyStartYear, 6, 1), 'yyyy-MM');
 }
 
 export function DashboardContent() {
@@ -97,7 +91,7 @@ export function DashboardContent() {
   const myCurrentContrib = contributions.find(
     c => c.memberId === user?.id && c.purpose === 'monthly' && c.month === myCurrentMonth
   );
-  const fyStart = fiscalYearStartKey();
+  const fyStart = groupYearStartKey(currentGroupYear());
   const myFinesFY = contributions
     .filter(c => c.memberId === user?.id && c.month >= fyStart)
     .reduce((s, c) => s + c.fineAmount, 0);

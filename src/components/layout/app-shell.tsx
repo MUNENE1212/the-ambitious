@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
+import { useAutoDues } from '@/lib/use-auto-dues';
 import { BottomNav } from './bottom-nav';
 import { TopBar } from './top-bar';
 import { PageLoading } from '../ui/loading';
@@ -12,6 +13,10 @@ import { PWAInstallBanner } from '../ui/pwa-install-banner';
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+
+  // From the automation month (AGM) onward, any visit generates the current
+  // month's dues if missing — see src/lib/use-auto-dues.ts.
+  useAutoDues(user);
 
   useEffect(() => {
     if (!loading && !user) {

@@ -27,7 +27,7 @@ const sha = resolveSha();
 const src = readFileSync(target, 'utf8');
 const stamped = src.replace(
   /const CACHE_NAME = .*;/,
-  `const CACHE_NAME = 'kuku-${sha}';`,
+  `const CACHE_NAME = 'ambitious-${sha}';`,
 );
 
 if (stamped === src) {
@@ -36,4 +36,4 @@ if (stamped === src) {
 }
 
 writeFileSync(target, stamped);
-console.log(`Stamped ${target} with CACHE_NAME 'kuku-${sha}'`);
+console.log(`Stamped ${target} with CACHE_NAME 'ambitious-${sha}'`);
