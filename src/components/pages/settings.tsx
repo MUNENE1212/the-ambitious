@@ -138,7 +138,7 @@ export function SettingsContent() {
             <div className="space-y-2">
               <p className="text-xs text-stone-400">Monthly contribution rates per group year (July–June). Members who are secondary/minors pay the secondary rate.</p>
               {rateYears.map(yr => (
-                <div key={yr} className="space-y-2 rounded-lg border border-stone-100 p-3">
+                <div key={yr} className="space-y-2 rounded-xl border border-stone-100 p-3">
                   <p className="text-sm font-medium text-stone-700">{yr}{yr === currentGroupYear() && <span className="ml-1 text-xs text-amber-600">(current)</span>}</p>
                   <Input
                     label="Primary Member (KES)"

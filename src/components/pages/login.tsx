@@ -30,15 +30,20 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-amber-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-sm">
+    <div className="relative min-h-screen bg-brand-gradient flex items-center justify-center p-4 overflow-hidden">
+      {/* Decorative blooms */}
+      <div aria-hidden className="absolute -top-24 -left-20 w-72 h-72 rounded-full bg-gold-300/10 blur-3xl" />
+      <div aria-hidden className="absolute -bottom-32 -right-16 w-80 h-80 rounded-full bg-amber-400/15 blur-3xl" />
+      <div className="relative w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="text-6xl mb-3">🌱</div>
-          <h1 className="text-2xl font-bold text-amber-800">{settings.groupName}</h1>
-          <p className="text-stone-500 mt-1">Contributions, funds &amp; forum — in one place</p>
+          <div className="grid place-items-center w-16 h-16 mx-auto rounded-2xl bg-white/10 ring-1 ring-white/15 text-4xl mb-4">
+            🌱
+          </div>
+          <h1 className="text-2xl font-bold text-white tracking-tight">{settings.groupName}</h1>
+          <p className="text-gold-200/70 mt-1.5 text-sm">Contributions, funds &amp; forum — in one place</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="bg-white rounded-3xl shadow-lift border border-white/40 p-6 space-y-4">
           <Input
             label="Phone Number"
             type="tel"
@@ -71,7 +76,7 @@ export function LoginPage() {
           </Button>
         </form>
 
-        <p className="text-center text-xs text-stone-400 mt-6">
+        <p className="text-center text-xs text-gold-200/50 mt-6">
           Contact your admin to get registered
         </p>
       </div>

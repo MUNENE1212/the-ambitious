@@ -1,19 +1,28 @@
 interface StatCardProps {
   label: string;
-  value: string | number;
+  value: string;
+  /** Small line under the value — a count, a delta, a hint. */
+  hint?: string;
+  tone?: 'default' | 'positive' | 'negative' | 'accent';
   icon?: React.ReactNode;
-  trend?: 'up' | 'down' | 'neutral';
-  warning?: boolean;
 }
 
-export function StatCard({ label, value, icon, warning }: StatCardProps) {
+const tones = {
+  default: 'text-stone-800',
+  positive: 'text-emerald-600',
+  negative: 'text-red-600',
+  accent: 'text-gold-600',
+};
+
+export function StatCard({ label, value, hint, tone = 'default', icon }: StatCardProps) {
   return (
-    <div className={`bg-white rounded-xl border p-4 ${warning ? 'border-amber-300 bg-amber-50' : 'border-stone-200'}`}>
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-stone-500">{label}</p>
-        {icon && <span className="text-amber-600">{icon}</span>}
+    <div className="bg-white rounded-2xl border border-stone-200/70 shadow-soft p-3.5">
+      <div className="flex items-center gap-1.5 text-stone-400">
+        {icon}
+        <p className="eyebrow truncate">{label}</p>
       </div>
-      <p className={`mt-1 text-2xl font-bold ${warning ? 'text-amber-700' : 'text-stone-800'}`}>{value}</p>
+      <p className={`text-lg font-bold mt-1.5 tabular-nums leading-tight ${tones[tone]}`}>{value}</p>
+      {hint && <p className="text-xs text-stone-400 mt-0.5 truncate">{hint}</p>}
     </div>
   );
 }

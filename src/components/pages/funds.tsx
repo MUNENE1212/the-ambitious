@@ -20,12 +20,12 @@ export function FundsContent() {
 
   return (
     <div>
-      <div className="flex border-b border-stone-200 bg-white sticky top-[52px] z-20 overflow-x-auto no-scrollbar">
+      <div className="flex border-b border-stone-200/70 bg-white/85 backdrop-blur-lg sticky top-[60px] z-20 overflow-x-auto no-scrollbar">
         {tabs.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex-1 min-w-[90px] px-3 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors
+            className={`flex-1 min-w-[90px] px-3 py-3 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors
               ${activeTab === tab.id ? 'border-amber-700 text-amber-700' : 'border-transparent text-stone-500 hover:text-stone-700'}`}
           >
             {tab.label}

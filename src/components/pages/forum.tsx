@@ -215,7 +215,7 @@ export function ForumContent() {
 
             <form onSubmit={handleReply} className="flex gap-2">
               <input
-                className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                className="flex-1 rounded-xl border border-stone-200 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
                 placeholder={selectedPost.category === 'Announcement' ? 'Reply to leadership...' : 'Write a reply...'}
                 value={reply}
                 onChange={e => setReply(e.target.value)}

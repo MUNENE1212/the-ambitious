@@ -7,6 +7,7 @@ import { Contribution, Expense, BankTransaction, Investment, hydrateContribution
 import { useSettings } from '@/lib/hooks';
 import { calculateFinancials, formatKES } from '@/lib/financial';
 import { Loading } from '@/components/ui/loading';
+import { StatCard } from '@/components/ui/stat-card';
 
 export function FundsOverviewTab() {
   const { settings, loading: settingsLoading } = useSettings();
@@ -34,36 +35,29 @@ export function FundsOverviewTab() {
 
   return (
     <div className="p-4 space-y-4">
-      <div className="bg-gradient-to-br from-amber-900 to-amber-700 rounded-2xl p-5 text-gold-100">
-        <p className="text-xs uppercase tracking-wide text-gold-200/80 font-mono">Total Group Funds</p>
-        <p className="text-3xl font-bold mt-1 tabular-nums">{formatKES(fin.totalGroupFunds)}</p>
-      </div>
-
-      <div className="bg-white rounded-xl border border-stone-200 p-4 text-xs text-stone-500 font-mono">
-        {formatKES(fin.cashOnHand)} cash + {formatKES(fin.bankBalance)} bank + {formatKES(fin.investmentsValue)} investments
-        = {formatKES(fin.totalGroupFunds)}
+      <div className="relative overflow-hidden rounded-3xl bg-brand-gradient shadow-hero p-5 pt-6 text-white">
+        <div aria-hidden className="absolute -top-16 -right-10 w-48 h-48 rounded-full bg-gold-300/15 blur-2xl" />
+        <div className="relative">
+          <p className="eyebrow text-gold-200/90">Total Group Funds</p>
+          <p className="text-4xl font-bold mt-2 tabular-nums tracking-tight">{formatKES(fin.totalGroupFunds)}</p>
+          <p className="text-xs text-gold-200/70 mt-2 tabular-nums">
+            {formatKES(fin.cashOnHand)} cash + {formatKES(fin.bankBalance)} bank + {formatKES(fin.investmentsValue)} investments
+          </p>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-white rounded-xl border border-stone-200 p-4">
-          <p className="text-sm text-stone-500">Cash on Hand</p>
-          <p className="text-xl font-bold text-stone-800 tabular-nums">{formatKES(fin.cashOnHand)}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-stone-200 p-4">
-          <p className="text-sm text-stone-500">Bank Balance</p>
-          <p className="text-xl font-bold text-stone-800 tabular-nums">{formatKES(fin.bankBalance)}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-stone-200 p-4">
-          <p className="text-sm text-stone-500">Investments</p>
-          <p className="text-xl font-bold text-stone-800 tabular-nums">{formatKES(fin.investmentsValue)}</p>
-        </div>
-        <div className="bg-gold-50 border border-gold-200 rounded-xl p-4">
-          <p className="text-sm text-stone-600">AGM Party Fund</p>
-          <p className="text-xl font-bold text-gold-700 tabular-nums">{formatKES(fin.agmFundBalance)}</p>
+        <StatCard label="Cash on Hand" value={formatKES(fin.cashOnHand)} hint="held outside the bank" />
+        <StatCard label="Bank Balance" value={formatKES(fin.bankBalance)} hint="held by the treasurer" />
+        <StatCard label="Investments" value={formatKES(fin.investmentsValue)} hint="open positions" />
+        <div className="rounded-2xl bg-gold-50 border border-gold-200 shadow-soft p-3.5">
+          <p className="eyebrow text-gold-600/80">AGM Party Fund</p>
+          <p className="text-lg font-bold text-gold-700 tabular-nums mt-1.5 leading-tight">{formatKES(fin.agmFundBalance)}</p>
+          <p className="text-xs text-gold-600/70 mt-0.5">ring-fenced</p>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-stone-200 p-4">
+      <div className="bg-white rounded-2xl border border-stone-200/70 shadow-soft p-4">
         <div className="flex items-center justify-between">
           <span className="text-sm text-stone-500">Net Income (all-time)</span>
           <span className={`font-bold tabular-nums ${fin.netIncome >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>

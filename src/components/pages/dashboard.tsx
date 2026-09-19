@@ -15,6 +15,7 @@ import { calculateFinancials, formatKES } from '@/lib/financial';
 import { currentGroupYear, groupYearStartKey } from '@/lib/groupYear';
 import { useToast } from '@/components/ui/toast';
 import { Card } from '@/components/ui/card';
+import { StatCard } from '@/components/ui/stat-card';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Textarea } from '@/components/ui/textarea';
@@ -302,39 +303,60 @@ export function DashboardContent() {
   return (
     <div className="p-4 space-y-4">
       {/* Hero: Total Group Funds */}
-      <div className="bg-gradient-to-br from-amber-900 to-amber-700 rounded-2xl p-5 text-gold-100 animate-count-up">
-        <p className="text-xs uppercase tracking-wide text-gold-200/80 font-mono">Total Group Funds · live</p>
-        <p className="text-3xl font-bold mt-1 tabular-nums">{formatKES(fin.totalGroupFunds)}</p>
-        <p className="text-xs text-gold-200/70 mt-1">Cash + bank + investments</p>
+      <div className="relative overflow-hidden rounded-3xl bg-brand-gradient shadow-hero p-5 pt-6 text-white animate-count-up">
+        {/* Soft gold bloom, purely decorative */}
+        <div aria-hidden className="absolute -top-16 -right-10 w-48 h-48 rounded-full bg-gold-300/15 blur-2xl" />
+        <div className="relative">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-gold-300 opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-gold-300" />
+            </span>
+            <p className="eyebrow text-gold-200/90">Total Group Funds</p>
+          </div>
+          <p className="text-4xl font-bold mt-2 tabular-nums tracking-tight">{formatKES(fin.totalGroupFunds)}</p>
+
+          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+            {[
+              { label: 'Cash', value: fin.cashOnHand },
+              { label: 'Bank', value: fin.bankBalance },
+              { label: 'AGM fund', value: fin.agmFundBalance },
+            ].map(part => (
+              <div key={part.label} className="rounded-xl bg-white/10 ring-1 ring-white/10 py-2">
+                <p className="text-[10px] uppercase tracking-wider text-gold-200/70">{part.label}</p>
+                <p className="text-sm font-semibold tabular-nums mt-0.5">{formatKES(part.value)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Stat row */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="bg-white rounded-xl border border-stone-200 p-3">
-          <p className="text-xs text-stone-500">My Status</p>
-          <p className={`text-sm font-bold mt-1 ${myGoodStanding ? 'text-emerald-600' : 'text-red-600'}`}>
-            {myGoodStanding ? 'Paid ✓' : (myCurrentContrib?.status ?? 'Unpaid')}
-          </p>
-        </div>
-        <div className="bg-white rounded-xl border border-stone-200 p-3">
-          <p className="text-xs text-stone-500">My Fines (FY)</p>
-          <p className="text-sm font-bold mt-1 text-stone-800 tabular-nums">{formatKES(myFinesFY)}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-stone-200 p-3">
-          <p className="text-xs text-stone-500">Next AGM</p>
-          <p className="text-sm font-bold mt-1 text-stone-800 tabular-nums">{daysToAgm} days</p>
-        </div>
+        <StatCard
+          label="My status"
+          value={myGoodStanding ? 'Clear' : (myCurrentContrib?.status ?? 'Unpaid')}
+          tone={myGoodStanding ? 'positive' : 'negative'}
+          hint={myGoodStanding ? 'up to date' : 'action needed'}
+        />
+        <StatCard
+          label="My fines"
+          value={formatKES(myFinesFY)}
+          tone={myFinesFY > 0 ? 'negative' : 'default'}
+          hint="this year"
+        />
+        <StatCard label="Next AGM" value={`${daysToAgm}`} hint={daysToAgm === 1 ? 'day away' : 'days away'} tone="accent" />
       </div>
 
       {/* Pay this month — the member's own current dues, submitted without leaving Home */}
       {myCurrentContrib && myCurrentContrib.status !== 'Paid' && (
-        <Card>
+        <Card className="ring-1 ring-gold-200/60">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-wide text-stone-500 font-mono">
+              <p className="eyebrow text-stone-400">
                 {format(new Date(`${myCurrentMonth}-01`), 'MMMM yyyy')} contribution
               </p>
-              <p className="text-2xl font-bold text-stone-800 tabular-nums mt-1">
+              <p className="text-3xl font-bold text-stone-800 tabular-nums mt-1 tracking-tight">
                 {formatKES(myCurrentContrib.amount + myCurrentContrib.fineAmount)}
               </p>
               {myCurrentContrib.fineAmount > 0 && (
@@ -354,7 +376,7 @@ export function DashboardContent() {
               treasurer to confirm it against their own M-Pesa message.
             </p>
           ) : (
-            <Button className="w-full mt-3" onClick={() => setPayContrib(myCurrentContrib)}>
+            <Button size="lg" className="w-full mt-4" onClick={() => setPayContrib(myCurrentContrib)}>
               Submit M-Pesa payment
             </Button>
           )}
@@ -362,9 +384,14 @@ export function DashboardContent() {
       )}
 
       {myCurrentContrib?.status === 'Paid' && (
-        <p className="text-sm text-emerald-700 text-center">
-          ✓ {format(new Date(`${myCurrentMonth}-01`), 'MMMM')} contribution verified — you are up to date
-        </p>
+        <div className="flex items-center justify-center gap-2 rounded-2xl bg-emerald-50 ring-1 ring-emerald-200 px-4 py-3">
+          <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+          </svg>
+          <p className="text-sm font-medium text-emerald-800">
+            {format(new Date(`${myCurrentMonth}-01`), 'MMMM')} verified — you are up to date
+          </p>
+        </div>
       )}
 
       {/* Treasurer/admin: verification queue */}
@@ -375,13 +402,18 @@ export function DashboardContent() {
               <button
                 key={c.id}
                 onClick={() => setVerifyContrib(c)}
-                className="w-full flex items-center justify-between gap-3 rounded-lg border border-stone-200 p-3 text-left hover:bg-stone-50 transition-colors"
+                className="pressable w-full flex items-center justify-between gap-3 rounded-xl border border-stone-200 bg-white p-3 text-left hover:bg-stone-50"
               >
-                <div className="min-w-0">
+                <div className="min-w-0 flex items-center gap-3">
+                  <span className="grid place-items-center w-9 h-9 rounded-full bg-amber-100 text-amber-800 text-xs font-bold shrink-0">
+                    {c.memberName.split(' ').map(n => n[0]).slice(0, 2).join('')}
+                  </span>
+                  <div className="min-w-0">
                   <p className="font-medium text-stone-800 truncate">{c.memberName}</p>
                   <p className="text-xs text-stone-500">
                     {c.month} · <span className="font-mono">{c.mpesaCode}</span>
                   </p>
+                  </div>
                 </div>
                 <span className="text-sm font-semibold text-amber-700 tabular-nums shrink-0">
                   {formatKES(c.amount + c.fineAmount)}
@@ -398,7 +430,7 @@ export function DashboardContent() {
       {/* Pinned Announcement */}
       {pinnedPost && (
         <Link href="/forum">
-          <div className="bg-gold-50 border border-gold-200 rounded-xl p-4 hover:bg-gold-100 transition-colors">
+          <div className="pressable bg-gold-50 border border-gold-200 rounded-2xl p-4 hover:bg-gold-100">
             <div className="flex items-center gap-2">
               <Badge variant="gold">Announcement</Badge>
               <TitleBadges titles={pinnedPost.authorTitles} />
@@ -414,7 +446,7 @@ export function DashboardContent() {
       <Card>
         <form onSubmit={handlePostIdea} className="flex gap-2">
           <input
-            className="flex-1 rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+            className="flex-1 rounded-xl border border-stone-200 px-3.5 py-2.5 text-sm shadow-soft transition-colors focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/25"
             placeholder="💡 What's your idea?"
             value={idea}
             onChange={e => setIdea(e.target.value)}
@@ -422,7 +454,7 @@ export function DashboardContent() {
           <button
             type="submit"
             disabled={postingIdea || !idea.trim()}
-            className="px-4 py-2 rounded-lg bg-amber-700 text-white text-sm font-medium disabled:opacity-50"
+            className="pressable px-4 py-2.5 rounded-xl bg-amber-800 text-white text-sm font-semibold shadow-soft disabled:opacity-50"
           >
             Post
           </button>
@@ -432,9 +464,12 @@ export function DashboardContent() {
 
       {/* Member spotlight */}
       {spotlight && (
-        <p className="text-sm text-stone-600 text-center">
-          🎉 <strong>{spotlight.name}</strong> has a {spotlight.streak}-month clean payment streak
-        </p>
+        <div className="flex items-center justify-center gap-2 rounded-2xl bg-white border border-stone-200/70 shadow-soft px-4 py-3">
+          <span className="text-base">🎉</span>
+          <p className="text-sm text-stone-600">
+            <strong className="text-stone-800">{spotlight.name}</strong> has a {spotlight.streak}-month clean streak
+          </p>
+        </div>
       )}
 
       {/* Funds trend */}

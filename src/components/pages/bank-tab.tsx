@@ -124,17 +124,17 @@ export function BankTab() {
   return (
     <div className="p-4 space-y-4">
       <div className="grid grid-cols-2 gap-3">
-        <div className="bg-white rounded-xl border border-stone-200 p-4">
+        <div className="bg-white rounded-2xl border border-stone-200/70 shadow-soft p-4">
           <p className="text-sm text-stone-500">Cash to Bank</p>
           <p className="text-xl font-bold text-emerald-600">{formatKES(totalDeposits)}</p>
         </div>
-        <div className="bg-white rounded-xl border border-stone-200 p-4">
+        <div className="bg-white rounded-2xl border border-stone-200/70 shadow-soft p-4">
           <p className="text-sm text-stone-500">Bank to Cash</p>
           <p className="text-xl font-bold text-red-600">{formatKES(totalWithdrawals)}</p>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-stone-200 p-4">
+      <div className="bg-white rounded-2xl border border-stone-200/70 shadow-soft p-4">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-stone-500">Bank Balance</p>

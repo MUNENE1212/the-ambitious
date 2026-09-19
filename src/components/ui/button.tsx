@@ -3,22 +3,23 @@
 import { ButtonHTMLAttributes, forwardRef } from 'react';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'accent';
   size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
 }
 
 const variants = {
-  primary: 'bg-amber-700 text-white hover:bg-amber-800 active:bg-amber-900 shadow-sm',
-  secondary: 'bg-white text-stone-700 border border-stone-300 hover:bg-stone-50 active:bg-stone-100',
-  danger: 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800',
+  primary: 'bg-amber-800 text-white hover:bg-amber-900 active:bg-amber-900 shadow-soft',
+  accent: 'bg-gold-300 text-amber-900 hover:bg-gold-200 active:bg-gold-400 shadow-soft',
+  secondary: 'bg-white text-stone-700 border border-stone-200 hover:bg-stone-50 active:bg-stone-100 shadow-soft',
+  danger: 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 shadow-soft',
   ghost: 'text-stone-600 hover:bg-stone-100 active:bg-stone-200',
 };
 
 const sizes = {
-  sm: 'px-3 py-1.5 text-sm',
-  md: 'px-4 py-2 text-sm',
-  lg: 'px-6 py-3 text-base',
+  sm: 'px-3 py-1.5 text-sm rounded-lg',
+  md: 'px-4 py-2.5 text-sm rounded-xl',
+  lg: 'px-6 py-3.5 text-base rounded-xl',
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -26,8 +27,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     <button
       ref={ref}
       disabled={disabled || loading}
-      className={`inline-flex items-center justify-center font-medium rounded-lg transition-colors
-        disabled:opacity-50 disabled:cursor-not-allowed ${variants[variant]} ${sizes[size]} ${className}`}
+      className={`pressable inline-flex items-center justify-center font-semibold
+        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/40 focus-visible:ring-offset-1
+        disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100
+        ${variants[variant]} ${sizes[size]} ${className}`}
       {...props}
     >
       {loading && (

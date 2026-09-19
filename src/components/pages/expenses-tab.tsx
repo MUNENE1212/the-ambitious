@@ -110,7 +110,7 @@ export function ExpensesTab() {
 
   return (
     <div className="p-4 space-y-4">
-      <div className="bg-white rounded-xl border border-stone-200 p-4">
+      <div className="bg-white rounded-2xl border border-stone-200/70 shadow-soft p-4">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm text-stone-500">Total Expenses</p>

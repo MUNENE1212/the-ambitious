@@ -442,25 +442,25 @@ export function ContributionsContent() {
 
   return (
     <div className="p-4 space-y-4">
-      <div className="flex bg-stone-100 rounded-lg p-1">
+      <div className="flex bg-stone-100 rounded-xl p-1 gap-1">
         <button
           onClick={() => setActiveTab('monthly')}
-          className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors
-            ${activeTab === 'monthly' ? 'bg-white text-amber-700 shadow-sm' : 'text-stone-500'}`}
+          className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all
+            ${activeTab === 'monthly' ? 'bg-white text-amber-800 shadow-soft' : 'text-stone-500 hover:text-stone-700'}`}
         >
           Monthly Dues
         </button>
         <button
           onClick={() => setActiveTab('meetingFee')}
-          className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors
-            ${activeTab === 'meetingFee' ? 'bg-white text-amber-700 shadow-sm' : 'text-stone-500'}`}
+          className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all
+            ${activeTab === 'meetingFee' ? 'bg-white text-amber-800 shadow-soft' : 'text-stone-500 hover:text-stone-700'}`}
         >
           Meeting Fees
         </button>
         <button
           onClick={() => setActiveTab('arrears')}
-          className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors
-            ${activeTab === 'arrears' ? 'bg-white text-amber-700 shadow-sm' : 'text-stone-500'}`}
+          className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all
+            ${activeTab === 'arrears' ? 'bg-white text-amber-800 shadow-soft' : 'text-stone-500 hover:text-stone-700'}`}
         >
           Owed{totals.totalOwed > 0 ? ` (${formatKES(totals.totalOwed).replace('KES ', '')})` : ''}
         </button>
@@ -468,13 +468,20 @@ export function ContributionsContent() {
 
       {activeTab === 'arrears' && (
         <>
-          <div className="bg-white rounded-xl border border-stone-200 p-4">
-            <p className="text-sm text-stone-500">Owed to the group</p>
-            <p className="text-2xl font-bold text-red-600 tabular-nums">{formatKES(totals.totalOwed)}</p>
-            <div className="flex gap-4 text-sm text-stone-500 mt-1">
-              <span>{formatKES(totals.totalDues)} dues</span>
-              <span>{formatKES(totals.totalFines)} fines</span>
-              <span>{totals.membersInArrears} member{totals.membersInArrears === 1 ? '' : 's'}</span>
+          <div className="rounded-2xl bg-white border border-stone-200/70 shadow-soft p-4">
+            <p className="eyebrow text-stone-400">Owed to the group</p>
+            <p className="text-3xl font-bold text-red-600 tabular-nums mt-1 tracking-tight">{formatKES(totals.totalOwed)}</p>
+            <div className="grid grid-cols-3 gap-2 mt-3">
+              {[
+                { l: 'Dues', v: formatKES(totals.totalDues) },
+                { l: 'Fines', v: formatKES(totals.totalFines) },
+                { l: 'Members', v: String(totals.membersInArrears) },
+              ].map(x => (
+                <div key={x.l} className="rounded-xl bg-stone-50 py-2 px-2 text-center">
+                  <p className="text-[10px] uppercase tracking-wider text-stone-400">{x.l}</p>
+                  <p className="text-sm font-semibold text-stone-700 tabular-nums mt-0.5">{x.v}</p>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -485,7 +492,11 @@ export function ContributionsContent() {
               {visibleArrears.filter(r => r.totalOwed > 0).map(r => (
                 <Card key={r.memberId}>
                   <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex gap-3">
+                      <span className="grid place-items-center w-9 h-9 rounded-full bg-red-50 text-red-600 text-xs font-bold shrink-0 ring-1 ring-red-100">
+                        {r.memberName.split(' ').map(n => n[0]).slice(0, 2).join('')}
+                      </span>
+                      <div className="min-w-0">
                       <p className="font-medium text-stone-800">{r.memberName}</p>
                       <div className="text-xs text-stone-500 mt-1 space-y-0.5">
                         {r.unpaidDues > 0 && (
@@ -499,6 +510,7 @@ export function ContributionsContent() {
                             {r.unpaidMonths.length > 1 ? ` → ${r.unpaidMonths[r.unpaidMonths.length - 1]}` : ''}
                           </p>
                         )}
+                      </div>
                       </div>
                     </div>
                     <div className="text-right shrink-0">
@@ -524,14 +536,14 @@ export function ContributionsContent() {
       )}
 
       {activeTab !== 'arrears' && (
-      <div className="bg-white rounded-xl border border-stone-200 p-4">
-        <div className="flex items-center justify-between">
+      <div className="bg-white rounded-2xl border border-stone-200/70 shadow-soft p-4">
+        <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-sm text-stone-500">Total Collected</p>
-            <p className="text-2xl font-bold text-amber-700">{formatKES(totalCollected)}</p>
-            <div className="flex gap-3 text-sm text-stone-400">
-              {pendingCount > 0 && <span>{pendingCount} pending</span>}
-              {unpaidCount > 0 && <span>{unpaidCount} unpaid</span>}
+            <p className="eyebrow text-stone-400">Total Collected</p>
+            <p className="text-2xl font-bold text-stone-800 tabular-nums mt-1">{formatKES(totalCollected)}</p>
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {pendingCount > 0 && <Badge variant="info">{pendingCount} pending</Badge>}
+              {unpaidCount > 0 && <Badge variant="warning">{unpaidCount} unpaid</Badge>}
             </div>
           </div>
           {canEditLedger && activeTab === 'monthly' && (
@@ -703,7 +715,7 @@ export function ContributionsContent() {
               </div>
             )}
             {verifyContrib.fineAmount > 0 && (
-              <label className="flex items-start gap-2 rounded-lg border border-stone-200 p-3 text-sm cursor-pointer">
+              <label className="flex items-start gap-2 rounded-xl border border-stone-200 p-3 text-sm cursor-pointer">
                 <input
                   type="checkbox"
                   checked={fineIncluded}
@@ -861,7 +873,7 @@ function MonthManager({
             const paid = recs.filter(c => c.status === 'Paid').length;
             const isFuture = month > nowKey;
             return (
-              <div key={month} className={`flex items-center justify-between rounded-lg border border-stone-100 p-3 ${isFuture ? 'opacity-50' : ''}`}>
+              <div key={month} className={`flex items-center justify-between rounded-xl border border-stone-100 p-3 ${isFuture ? 'opacity-50' : ''}`}>
                 <div>
                   <p className="text-sm font-medium text-stone-700">{format(new Date(month + '-01'), 'MMM yyyy')}</p>
                   <p className="text-xs text-stone-400">
@@ -912,7 +924,7 @@ function LedgerEntryModal({
             : 'Unpaid entries are recorded as Unpaid; the app applies the constitutional late fine automatically once the cutoff passes.'}
         </p>
         {rows.map((row, idx) => (
-          <div key={row.member.id} className="rounded-lg border border-stone-100 p-3 space-y-2">
+          <div key={row.member.id} className="rounded-xl border border-stone-100 p-3 space-y-2">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-stone-700">
                 {row.member.name}

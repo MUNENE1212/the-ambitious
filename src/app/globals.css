@@ -1,8 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f4f5fa;
-  --foreground: #1c2440;
+  --background: #eff2f9;
+  --foreground: #171d31;
+
+  /* Surfaces and elevation. Shadows are navy-tinted rather than neutral black,
+     so cards sit in the palette instead of greying it out. */
+  --surface: #ffffff;
+  --shadow-soft: 0 1px 2px rgba(23, 29, 49, .04), 0 2px 8px rgba(23, 29, 49, .05);
+  --shadow-lift: 0 2px 4px rgba(23, 29, 49, .05), 0 8px 24px rgba(23, 29, 49, .09);
+  --shadow-hero: 0 10px 30px -8px rgba(24, 40, 73, .45);
 }
 
 /*
@@ -12,6 +19,21 @@
  * add a small `gold` scale for accent use (title badges, highlights).
  */
 @theme {
+  /* Neutrals are repainted too, the same trick as `amber` below: the UI is
+     written in `stone-*`, which is a WARM grey and fights a navy brand. These
+     are the same steps pulled cool and slightly navy-tinted, so every existing
+     class harmonises without touching a single component. */
+  --color-stone-50: #f6f7fb;
+  --color-stone-100: #ecEFF7;
+  --color-stone-200: #dbe0ee;
+  --color-stone-300: #c1c8de;
+  --color-stone-400: #929ab8;
+  --color-stone-500: #69718f;
+  --color-stone-600: #4b5471;
+  --color-stone-700: #39415e;
+  --color-stone-800: #252c45;
+  --color-stone-900: #171d31;
+
   --color-amber-50: #eef1f8;
   --color-amber-100: #dce2f0;
   --color-amber-200: #b9c5e1;
@@ -23,10 +45,11 @@
   --color-amber-800: #1e2a47;
   --color-amber-900: #182849;
 
-  --color-gold-50: #fbf3e1;
-  --color-gold-100: #f4e2b8;
-  --color-gold-200: #e9cb86;
-  --color-gold-300: #dcae58;
+  --color-gold-50: #fdf6e6;
+  --color-gold-100: #f7e7bd;
+  --color-gold-200: #eed08a;
+  --color-gold-300: #e0b45c;
+  --color-gold-400: #cf9a33;
   --color-gold-500: #b4801f;
   --color-gold-600: #96741a;
   --color-gold-700: #7a5714;
@@ -74,9 +97,44 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Geist is loaded in layout.tsx and exposed as --font-geist-sans. This used
+     to hardcode Arial, which silently overrode it and left the whole app in a
+     system serif-less default. */
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Money and counts should never shuffle width as they update. */
+.tabular-nums, [class*="tabular"] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Section label: small, upper, tracked — used above figures. */
+.eyebrow {
+  font-size: .6875rem;
+  line-height: 1rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.shadow-soft { box-shadow: var(--shadow-soft); }
+.shadow-lift { box-shadow: var(--shadow-lift); }
+.shadow-hero { box-shadow: var(--shadow-hero); }
+
+/* Brand surface used by the hero and top bar. */
+.bg-brand-gradient {
+  background-image: linear-gradient(135deg, #1e2a47 0%, #293759 55%, #35466f 100%);
+}
+
+/* Press feedback on tappable cards and rows. */
+.pressable {
+  transition: transform .12s ease, box-shadow .12s ease, background-color .12s ease;
+}
+.pressable:active {
+  transform: scale(.985);
 }
 
 /* PWA safe areas for notched phones */

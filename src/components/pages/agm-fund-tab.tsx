@@ -56,7 +56,7 @@ export function AgmFundTab() {
 
   return (
     <div className="p-4 space-y-4">
-      <div className="bg-gold-50 border border-gold-200 rounded-xl p-4">
+      <div className="bg-gold-50 border border-gold-200 rounded-2xl shadow-soft p-4">
         <p className="text-sm text-stone-600">Available now for the AGM</p>
         <p className="text-3xl font-bold text-gold-700 tabular-nums">{formatKES(balance)}</p>
         <p className="text-xs text-stone-500 mt-1">
