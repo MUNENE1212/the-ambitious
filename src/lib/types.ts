@@ -97,6 +97,13 @@ export interface Contribution {
   amount: number;
   fineAmount: number;
   status: ContributionStatus;
+  /**
+   * Whether the fine on this record has actually been settled. Members often
+   * pay the dues and leave the fine, so 'Paid' alone cannot mean both were
+   * collected. Undefined on records written before this existed, which were
+   * all-or-nothing — hydrateContribution defaults those to `status === 'Paid'`.
+   */
+  finePaid?: boolean;
   mpesaCode?: string;
   mpesaMessage?: string;
   treasurerMpesaCode?: string;
@@ -116,6 +123,7 @@ export function hydrateContribution(id: string, data: Record<string, unknown>): 
     id,
     purpose: (data.purpose as ContributionPurpose) ?? 'monthly',
     fineAmount: (data.fineAmount as number) ?? 0,
+    finePaid: (data.finePaid as boolean | undefined) ?? data.status === 'Paid',
   } as Contribution;
 }
 

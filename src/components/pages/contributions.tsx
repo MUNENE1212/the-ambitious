@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { collection, query, orderBy, onSnapshot, addDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Contribution, ContributionStatus, Member, PaymentMethod, hydrateMember, hydrateContribution } from '@/lib/types';
+import { Contribution, ContributionStatus, Fine, Member, PaymentMethod, hydrateMember, hydrateContribution } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import { useSettings } from '@/lib/hooks';
 import { canVerifyPayments, isSavingsGroupMember } from '@/lib/roles';
@@ -11,6 +11,8 @@ import { extractMpesaCode } from '@/lib/mpesa';
 import { contributionCutoffDate, findOverdueContributions } from '@/lib/fines';
 import { currentGroupYear, currentMonthKey, groupYearForMonth, groupYearLabel, monthsInGroupYear, rateFor } from '@/lib/groupYear';
 import { formatKES } from '@/lib/financial';
+import { arrearsForAll, groupArrears } from '@/lib/arrears';
+import { planCatchUp } from '@/lib/catchup';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -40,8 +42,14 @@ export function ContributionsContent() {
   const { showToast } = useToast();
   const [contributions, setContributions] = useState<Contribution[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [fines, setFines] = useState<Fine[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'monthly' | 'meetingFee'>('monthly');
+  const [activeTab, setActiveTab] = useState<'monthly' | 'meetingFee' | 'arrears'>('monthly');
+
+  // Catch-up: one lump sum spread over a member's unpaid months, oldest first
+  const [catchUpMember, setCatchUpMember] = useState<string | null>(null);
+  const [catchUpAmount, setCatchUpAmount] = useState('');
+  const [savingCatchUp, setSavingCatchUp] = useState(false);
 
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [selectedContrib, setSelectedContrib] = useState<Contribution | null>(null);
@@ -75,6 +83,9 @@ export function ContributionsContent() {
     ));
     unsubs.push(onSnapshot(collection(db, 'members'), (snap) => {
       setMembers(snap.docs.map(d => hydrateMember(d.id, d.data())));
+    }));
+    unsubs.push(onSnapshot(collection(db, 'fines'), (snap) => {
+      setFines(snap.docs.map(d => ({ id: d.id, ...d.data() } as Fine)));
     }));
     return () => unsubs.forEach(u => u());
   }, []);
@@ -359,6 +370,56 @@ export function ContributionsContent() {
       fySections.get(fy)!.set(month, contribs);
     });
 
+  const arrearsRows = arrearsForAll(members, contributions, fines);
+  const visibleArrears = canVerify ? arrearsRows : arrearsRows.filter(r => r.memberId === user?.id);
+  const totals = groupArrears(arrearsRows);
+
+  const catchUpPlan = catchUpMember
+    ? planCatchUp(
+        contributions.filter(c => c.memberId === catchUpMember),
+        Number(catchUpAmount) || 0,
+        settings,
+      )
+    : null;
+
+  const handleCatchUp = async () => {
+    if (!catchUpMember || !user) return;
+    // Recomputed here rather than closing over the render-computed catchUpPlan:
+    // the React Compiler treats a closure over a memoized render value as
+    // impure and rejects the Date.now() calls below (react-hooks/purity).
+    const plan = planCatchUp(
+      contributions.filter(c => c.memberId === catchUpMember),
+      Number(catchUpAmount) || 0,
+      settings,
+    );
+    if (plan.lines.length === 0) {
+      showToast('That amount does not cover even the oldest unpaid month', 'error');
+      return;
+    }
+    setSavingCatchUp(true);
+    try {
+      for (const line of plan.lines) {
+        await updateDoc(doc(db, 'contributions', line.contributionId), {
+          status: 'Paid',
+          fineAmount: line.fine,
+          finePaid: line.settled === 'full',
+          paidDate: format(new Date(), 'yyyy-MM-dd'),
+          paymentMethod: 'Mpesa',
+          verifiedBy: user.id,
+          verifiedAt: Date.now(),
+          recordedBy: `catch-up by ${user.name}`,
+          updatedAt: Date.now(),
+        });
+      }
+      showToast(`Settled ${plan.lines.length} month(s)`);
+      setCatchUpMember(null);
+      setCatchUpAmount('');
+    } catch {
+      showToast('Failed to record catch-up payment', 'error');
+    }
+    setSavingCatchUp(false);
+  };
+
   return (
     <div className="p-4 space-y-4">
       <div className="flex bg-stone-100 rounded-lg p-1">
@@ -376,8 +437,73 @@ export function ContributionsContent() {
         >
           Meeting Fees
         </button>
+        <button
+          onClick={() => setActiveTab('arrears')}
+          className={`flex-1 py-2 text-sm font-medium rounded-md transition-colors
+            ${activeTab === 'arrears' ? 'bg-white text-amber-700 shadow-sm' : 'text-stone-500'}`}
+        >
+          Owed{totals.totalOwed > 0 ? ` (${formatKES(totals.totalOwed).replace('KES ', '')})` : ''}
+        </button>
       </div>
 
+      {activeTab === 'arrears' && (
+        <>
+          <div className="bg-white rounded-xl border border-stone-200 p-4">
+            <p className="text-sm text-stone-500">Owed to the group</p>
+            <p className="text-2xl font-bold text-red-600 tabular-nums">{formatKES(totals.totalOwed)}</p>
+            <div className="flex gap-4 text-sm text-stone-500 mt-1">
+              <span>{formatKES(totals.totalDues)} dues</span>
+              <span>{formatKES(totals.totalFines)} fines</span>
+              <span>{totals.membersInArrears} member{totals.membersInArrears === 1 ? '' : 's'}</span>
+            </div>
+          </div>
+
+          {visibleArrears.filter(r => r.totalOwed > 0).length === 0 ? (
+            <EmptyState title="Nothing outstanding" description="Every billed month and fine has been settled." />
+          ) : (
+            <div className="space-y-2">
+              {visibleArrears.filter(r => r.totalOwed > 0).map(r => (
+                <Card key={r.memberId}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium text-stone-800">{r.memberName}</p>
+                      <div className="text-xs text-stone-500 mt-1 space-y-0.5">
+                        {r.unpaidDues > 0 && (
+                          <p>{formatKES(r.unpaidDues)} dues · {r.unpaidMonths.length} month{r.unpaidMonths.length === 1 ? '' : 's'}</p>
+                        )}
+                        {r.unpaidContributionFines > 0 && <p>{formatKES(r.unpaidContributionFines)} late fines</p>}
+                        {r.unpaidOtherFines > 0 && <p>{formatKES(r.unpaidOtherFines)} absence/welfare fines</p>}
+                        {r.unpaidMonths.length > 0 && (
+                          <p className="text-stone-400">
+                            oldest {r.unpaidMonths[0]}
+                            {r.unpaidMonths.length > 1 ? ` → ${r.unpaidMonths[r.unpaidMonths.length - 1]}` : ''}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-lg font-bold text-red-600 tabular-nums">{formatKES(r.totalOwed)}</p>
+                      {canVerify && (
+                        <Button size="sm" variant="secondary" className="mt-2"
+                          onClick={() => { setCatchUpMember(r.memberId); setCatchUpAmount(''); }}>
+                          Record payment
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          <p className="text-xs text-stone-400 text-center">
+            A fine stays owed even after its month&apos;s dues are paid. Settling a late month costs the
+            dues plus the {formatKES(settings.lateContributionFine)} fine.
+          </p>
+        </>
+      )}
+
+      {activeTab !== 'arrears' && (
       <div className="bg-white rounded-xl border border-stone-200 p-4">
         <div className="flex items-center justify-between">
           <div>
@@ -399,6 +525,7 @@ export function ContributionsContent() {
           <p className="text-xs text-stone-400 mt-2">No refreshments are bought with this fee — it funds the AGM Party Fund (see Funds tab).</p>
         )}
       </div>
+      )}
 
       {pendingItems.length > 0 && (
         <Card title="Pending Verification">
@@ -562,6 +689,85 @@ export function ContributionsContent() {
           </form>
         )}
       </Modal>
+      {/* Catch-up payment: spread one lump sum over the oldest unpaid months */}
+      <Modal
+        open={!!catchUpMember}
+        onClose={() => { setCatchUpMember(null); setCatchUpAmount(''); }}
+        title="Record a catch-up payment"
+      >
+        {catchUpMember && (
+          <div className="space-y-4">
+            <p className="text-sm text-stone-600">
+              {members.find(m => m.id === catchUpMember)?.name} — the amount is applied to the oldest unpaid
+              month first. Each late month costs its dues plus the {formatKES(settings.lateContributionFine)} fine.
+            </p>
+            <Input
+              label="Amount received"
+              type="number"
+              inputMode="numeric"
+              placeholder="e.g. 2600"
+              value={catchUpAmount}
+              onChange={e => setCatchUpAmount(e.target.value)}
+            />
+
+            {catchUpPlan && Number(catchUpAmount) > 0 && (
+              <div className="bg-stone-50 rounded-lg p-3 text-sm space-y-2">
+                {catchUpPlan.lines.length === 0 ? (
+                  <p className="text-red-600">Not enough to settle even the oldest unpaid month.</p>
+                ) : (
+                  <>
+                    <div className="space-y-1">
+                      {catchUpPlan.lines.map(l => (
+                        <div key={l.contributionId} className="flex justify-between">
+                          <span className="text-stone-600">
+                            {l.month}
+                            {l.settled === 'duesOnly' && <span className="text-red-500"> · fine still owed</span>}
+                          </span>
+                          <span className="tabular-nums">
+                            {formatKES(l.settled === 'full' ? l.dues + l.fine : l.dues)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="border-t border-stone-200 pt-2 space-y-1">
+                      <div className="flex justify-between font-medium">
+                        <span>Applied</span><span className="tabular-nums">{formatKES(catchUpPlan.applied)}</span>
+                      </div>
+                      {catchUpPlan.leftover > 0 && (
+                        <div className="flex justify-between text-amber-700">
+                          <span>Left over (not applied)</span>
+                          <span className="tabular-nums">{formatKES(catchUpPlan.leftover)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-stone-500">
+                        <span>Still owed after this</span>
+                        <span className="tabular-nums">{formatKES(catchUpPlan.stillOwed)}</span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <Button type="button" variant="secondary" className="flex-1"
+                onClick={() => { setCatchUpMember(null); setCatchUpAmount(''); }}>Cancel</Button>
+              <Button type="button" className="flex-1" loading={savingCatchUp}
+                disabled={!catchUpPlan || catchUpPlan.lines.length === 0}
+                onClick={handleCatchUp}>
+                Apply
+              </Button>
+            </div>
+            {catchUpPlan && catchUpPlan.leftover > 0 && catchUpPlan.lines.length > 0 && (
+              <p className="text-xs text-stone-400">
+                The leftover is deliberately not applied — record it separately once the next month is billed,
+                so no part payment is silently absorbed.
+              </p>
+            )}
+          </div>
+        )}
+      </Modal>
+
     </div>
   );
 }

@@ -39,7 +39,12 @@ export function calculateFinancials(inputs: FinancialInputs): FinancialSummary {
   // Every paid contribution (monthly dues, meeting fees, entry fees) is
   // banked by the treasurer per the constitution — it lands in bankBalance.
   const paidContributions = contributions.filter(c => c.status === 'Paid');
-  const totalContributionsCollected = paidContributions.reduce((s, c) => s + c.amount + c.fineAmount, 0);
+  // A member can settle the dues and leave the fine, so only count a fine as
+  // money in the bank when it was actually paid (finePaid). hydrateContribution
+  // defaults older records to the previous all-or-nothing behaviour.
+  const totalContributionsCollected = paidContributions.reduce(
+    (s, c) => s + c.amount + (c.finePaid ? c.fineAmount : 0), 0
+  );
 
   const activeExpenses = expenses.filter(e => e.status !== 'rejected');
   const totalExpenses = activeExpenses.reduce((s, e) => s + e.amount, 0);
