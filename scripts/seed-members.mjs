@@ -118,9 +118,10 @@ async function seed() {
   console.log('Next steps:');
   console.log('  1. Edit each member\'s real phone number from Admin.');
   console.log('  2. Assign office-bearer titles (chairperson, treasurer, ...) from Admin.');
-  console.log('  3. Enter opening balances in Settings — the source ledger shows KES 125,250');
-  console.log('     carried forward and KES 177,850 lifetime contributions as of April 2026;');
-  console.log('     the treasurer should confirm the cash/bank split before entering it.');
+  console.log('  3. Enter opening balances in Settings. Note the paper ledger\'s own totals do');
+  console.log('     not reconcile: its "TTOTAL CONTRIBUTION" mixes a net cash figure with a');
+  console.log('     gross one, and the per-member total column is a stale cached formula.');
+  console.log('     Take the figures from the import report, not from the sheet totals.');
   process.exit(0);
 }
 

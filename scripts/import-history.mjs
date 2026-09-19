@@ -29,7 +29,8 @@
  *   node scripts/import-history.mjs --expenses-method Mpesa   # default Cash
  *
  * Idempotent: existing (memberId, month, purpose 'monthly') records are skipped.
- * Expenses are write-once (Firestore rules deny updates) — review the dry-run first.
+ * Expenses can be corrected in place afterwards (the rules allow update; only
+ * delete is denied) — but review the dry-run first regardless.
  */
 
 import { readFileSync } from 'fs';
@@ -211,9 +212,13 @@ async function parseExpenses(spec) {
     if (total <= 0) return; // zero rows carry no financial record
 
     const year = monthNum >= 7 ? spec.fyStartYear : spec.fyStartYear + 1;
-    const category = /agm|general\s*meetin/i.test(reason)
+    // "AGM Party" is the ring-fenced party fund: food and drinks at an actual
+    // AGM. Ordinary monthly general-meeting costs are Administration — an
+    // earlier /general\s*meetin/ pattern here swept "Drinks @ General meeting"
+    // into the party fund and overstated it by KES 5,061.
+    const category = /\bagm\b|annual\s*general\s*meetin|mbuzi/i.test(reason)
       ? 'AGM Party'
-      : /registration|printing|search|certificate|transport|logistics|stamp/i.test(reason)
+      : /registration|printing|search|certificate|transport|logistics|stamp|drinks|general\s*meetin/i.test(reason)
         ? 'Administration'
         : 'Other';
 

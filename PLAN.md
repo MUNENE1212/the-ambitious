@@ -203,7 +203,9 @@ Deliberately the same stack as `kuku-egg-tracker` — proven, free-tier-friendly
 
 ## L. Migrating existing records
 
-The FY2025-26 sheet (`APRIL2026.xlsx`) already gives real seed data: 13 members, a running "Previous Total" of KES 125,250 carried in from prior years, KES 52,600 contributed so far this FY, KES 177,850 lifetime — and fine entries (KES 200 each) matching the constitution's late-payment rule exactly.
+The FY2025-26 sheet (`APRIL2026.xlsx`) already gives real seed data: 13 members, a running "Previous Total" of KES 125,250 carried in from prior years, KES 52,600 contributed so far this FY — and fine entries (KES 200 each) matching the constitution's late-payment rule exactly.
+
+> **Caution — these sheet totals do not reconcile.** "Previous Total" here is the prior year's *cash at hand* (already net of KES 47,150 of expenses), while the same row on the FY2024-25 sheet held a *gross* contributions carry. Adding the two and calling the result "TTOTAL CONTRIBUTION" (KES 177,850) mixes a net figure with a gross one, so it is not a lifetime contributions total. The per-member total column is also a cached formula (`=AL+AM`) whose saved results no longer match the month cells beside them — they sum to KES 52,600 where the actual cells sum to KES 56,800. Import from the month cells, never from the total columns.
 
 - A one-time import script reads each historical workbook (23-24, 24-25, and monthly 2025-26 sheets already on file) and writes one `contributions` record per member per month, preserving the real fine history instead of starting the ledger from zero.
 - The "Previous Total" carry-forward becomes each member's `openingBalance`, exactly mirroring how `Settings.openingCashBalance` already seeds the reference app's financial calculations.
