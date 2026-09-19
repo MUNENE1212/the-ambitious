@@ -69,3 +69,28 @@ export function groupYearLabel(label: string): string {
   const [a, b] = label.split('/');
   return `FY ${a}/${b.slice(2)}`;
 }
+
+/**
+ * The AGM runs on a fixed calendar day (Settings.agmDate, 'MM-DD'), so the
+ * party fund accrues in cycles that start at one AGM and are spent at the next.
+ * Returns the most recent AGM on or before `now`.
+ */
+export function lastAgmDate(agmDate: string, now: Date = new Date()): string {
+  const [mm, dd] = agmDate.split('-').map(Number);
+  const thisYear = new Date(now.getFullYear(), mm - 1, dd);
+  const year = now >= thisYear ? now.getFullYear() : now.getFullYear() - 1;
+  return `${year}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+}
+
+/** The next AGM strictly after `now`. */
+export function nextAgmDate(agmDate: string, now: Date = new Date()): string {
+  const [mm, dd] = agmDate.split('-').map(Number);
+  const thisYear = new Date(now.getFullYear(), mm - 1, dd);
+  const year = now >= thisYear ? now.getFullYear() + 1 : now.getFullYear();
+  return `${year}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+}
+
+/** First contribution month ('YYYY-MM') counted toward the current AGM cycle. */
+export function agmCycleStartMonth(agmDate: string, now: Date = new Date()): string {
+  return lastAgmDate(agmDate, now).slice(0, 7);
+}
