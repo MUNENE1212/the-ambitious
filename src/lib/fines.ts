@@ -8,7 +8,10 @@ import { Contribution } from './types';
 export function contributionCutoffDate(month: string, cutoffDay: number): Date {
   const [year, m] = month.split('-').map(Number);
   // JS months are 0-indexed, so `m` (1-12) already points at the next month.
-  return new Date(year, m - 1 + 1, cutoffDay);
+  // The deadline is the END of the cutoff day: "due by the 5th" means a payment
+  // made at any point on the 5th is on time, so lateness starts at 00:00 on the
+  // 6th. Using the start of the 5th would fine anyone paying that morning.
+  return new Date(year, m - 1 + 1, cutoffDay, 23, 59, 59, 999);
 }
 
 /**

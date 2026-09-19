@@ -6,7 +6,7 @@ import { db } from '@/lib/firebase';
 import { Contribution, ContributionStatus, Fine, Member, PaymentMethod, hydrateMember, hydrateContribution } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
 import { useSettings } from '@/lib/hooks';
-import { canVerifyPayments, isSavingsGroupMember } from '@/lib/roles';
+import { canAdminister, canVerifyPayments, isSavingsGroupMember } from '@/lib/roles';
 import { extractMpesaCode } from '@/lib/mpesa';
 import { contributionCutoffDate } from '@/lib/fines';
 import { currentGroupYear, currentMonthKey, groupYearForMonth, groupYearLabel, monthsInGroupYear, rateFor } from '@/lib/groupYear';
@@ -31,6 +31,9 @@ interface LedgerRow {
   mode: 'skip' | 'paid' | 'unpaid';
   amount: string;
   fine: string;
+  /** Whether that fine has been settled. A fine added to a past month is owed
+   *  until someone pays it, so this defaults to false whenever a fine is set. */
+  finePaid: boolean;
   method: PaymentMethod;
   code: string;
   paidDate: string;
@@ -67,6 +70,10 @@ export function ContributionsContent() {
 
   const [generating, setGenerating] = useState(false);
   const canVerify = canVerifyPayments(user);
+  // The ledger rewrites closed months and sets fines by hand, so it is the one
+  // place a single mistake rewrites history. Admin only — narrower than
+  // canVerifyPayments, which also admits the treasurer and their deputy.
+  const canEditLedger = canAdminister(user);
 
   // Month manager + ledger entry (treasurer backfill)
   const [showMonths, setShowMonths] = useState(false);
@@ -97,7 +104,7 @@ export function ContributionsContent() {
 
   /** Generate monthly dues for ANY month at that group year's rate (fills missing members). */
   const generateForMonth = async (month: string) => {
-    if (!canVerify) return;
+    if (!canEditLedger) return;
     setGenerating(true);
     try {
       const existing = contributions.filter(c => c.purpose === 'monthly' && c.month === month);
@@ -156,6 +163,7 @@ export function ContributionsContent() {
 
   /** Open the per-month ledger entry sheet, prefilled from existing records + that year's rate. */
   const openLedger = (month: string) => {
+    if (!canEditLedger) return;
     setLedgerMonth(month);
     const { primary, secondary } = rateFor(settings, month);
     const rows: LedgerRow[] = activeMembers.map(member => {
@@ -170,6 +178,7 @@ export function ContributionsContent() {
         fine: (existing?.fineAmount ?? 0).toString(),
         method: existing?.paymentMethod ?? 'Cash',
         code: existing?.mpesaCode ?? '',
+        finePaid: existing?.finePaid ?? false,
         paidDate: existing?.paidDate ?? '',
       };
     });
@@ -191,6 +200,7 @@ export function ContributionsContent() {
    */
   const saveLedger = async () => {
     if (!user || !ledgerMonth) return;
+    if (!canEditLedger) { showToast('Only an admin can edit the ledger', 'error'); return; }
     setSavingLedger(true);
     const cutoffPassed = new Date() > contributionCutoffDate(ledgerMonth, settings.contributionCutoffDay);
     let written = 0;
@@ -205,6 +215,8 @@ export function ContributionsContent() {
         if (row.mode === 'paid') {
           status = 'Paid';
           extra = {
+            // A fine can outlive the dues: the treasurer says whether it was settled.
+            finePaid: fine === 0 ? true : row.finePaid,
             paymentMethod: row.method,
             mpesaCode: row.code.trim() || null,
             mpesaMessage: row.existing?.mpesaMessage ?? (row.code.trim() ? undefined : 'Entered by treasurer via Ledger Entry'),
@@ -213,13 +225,13 @@ export function ContributionsContent() {
           };
         } else if (ledgerMonth < settings.autoDuesFrom) {
           status = 'Late';
-          extra = { fineAmount: fine, mpesaCode: null, paidDate: null, paymentMethod: null };
+          extra = { fineAmount: fine, finePaid: false, mpesaCode: null, paidDate: null, paymentMethod: null };
         } else if (cutoffPassed) {
           status = 'Late';
-          extra = { fineAmount: settings.lateContributionFine, mpesaCode: null, paidDate: null, paymentMethod: null };
+          extra = { fineAmount: settings.lateContributionFine, finePaid: false, mpesaCode: null, paidDate: null, paymentMethod: null };
         } else {
           status = 'Unpaid';
-          extra = { fineAmount: fine, mpesaCode: null, paidDate: null, paymentMethod: null };
+          extra = { fineAmount: fine, finePaid: false, mpesaCode: null, paidDate: null, paymentMethod: null };
         }
 
         const base = {
@@ -506,7 +518,7 @@ export function ContributionsContent() {
               {unpaidCount > 0 && <span>{unpaidCount} unpaid</span>}
             </div>
           </div>
-          {canVerify && activeTab === 'monthly' && (
+          {canEditLedger && activeTab === 'monthly' && (
             <Button onClick={() => setShowMonths(true)} size="sm">Months</Button>
           )}
           {canVerify && activeTab === 'meetingFee' && (
@@ -549,7 +561,7 @@ export function ContributionsContent() {
       {currentContribs.length === 0 ? (
         <EmptyState
           title={activeTab === 'monthly' ? 'No monthly dues' : 'No meeting-fee records'}
-          description={canVerify ? 'Open Months to generate or backfill records' : 'Nothing generated yet — check back soon'}
+          description={canEditLedger ? 'Open Months to generate or backfill records' : 'Nothing generated yet — check back soon'}
         />
       ) : (
         Array.from(fySections.entries()).map(([fy, fyMonths]) => (
@@ -909,6 +921,18 @@ function LedgerEntryModal({
               <div className="grid grid-cols-2 gap-2">
                 <Input label="Amount" type="number" inputMode="numeric" value={row.amount} onChange={e => onUpdate(idx, { amount: e.target.value })} />
                 <Input label="Fine" type="number" inputMode="numeric" value={row.fine} onChange={e => onUpdate(idx, { fine: e.target.value })} />
+                {row.mode === 'paid' && (parseFloat(row.fine) || 0) > 0 && (
+                  <label className="col-span-2 flex items-center gap-2 text-xs text-stone-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={row.finePaid}
+                      onChange={e => onUpdate(idx, { finePaid: e.target.checked })}
+                      className="h-4 w-4 accent-amber-700"
+                    />
+                    Fine of {row.fine} was also paid
+                    {!row.finePaid && <span className="text-red-500">— stays owed</span>}
+                  </label>
+                )}
                 {row.mode === 'paid' && (
                   <>
                     <Select
