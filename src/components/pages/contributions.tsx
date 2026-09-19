@@ -209,6 +209,14 @@ export function ContributionsContent() {
         if (row.mode === 'skip') continue;
         const amount = parseFloat(row.amount) || 0;
         const fine = parseFloat(row.fine) || 0;
+        // Past the cutoff an automation-era month earns the constitutional fine
+        // even if none was typed, so the effective fine — not the typed one —
+        // decides whether there is anything left to settle.
+        const autoFine =
+          row.mode !== 'paid' && ledgerMonth >= settings.autoDuesFrom && cutoffPassed
+            ? fine || settings.lateContributionFine
+            : fine;
+        const fineSettled = autoFine === 0 ? true : row.finePaid;
 
         let status: ContributionStatus;
         let extra: Record<string, unknown>;
@@ -216,7 +224,8 @@ export function ContributionsContent() {
           status = 'Paid';
           extra = {
             // A fine can outlive the dues: the treasurer says whether it was settled.
-            finePaid: fine === 0 ? true : row.finePaid,
+            fineAmount: fine,
+            finePaid: fineSettled,
             paymentMethod: row.method,
             mpesaCode: row.code.trim() || null,
             mpesaMessage: row.existing?.mpesaMessage ?? (row.code.trim() ? undefined : 'Entered by treasurer via Ledger Entry'),
@@ -225,13 +234,19 @@ export function ContributionsContent() {
           };
         } else if (ledgerMonth < settings.autoDuesFrom) {
           status = 'Late';
-          extra = { fineAmount: fine, finePaid: false, mpesaCode: null, paidDate: null, paymentMethod: null };
+          extra = { fineAmount: fine, finePaid: fineSettled, mpesaCode: null, paidDate: null, paymentMethod: null };
         } else if (cutoffPassed) {
+          // Past the cutoff the constitutional fine applies, unless the admin
+          // deliberately entered a different one.
           status = 'Late';
-          extra = { fineAmount: settings.lateContributionFine, finePaid: false, mpesaCode: null, paidDate: null, paymentMethod: null };
+          extra = {
+            fineAmount: autoFine,
+            finePaid: fineSettled,
+            mpesaCode: null, paidDate: null, paymentMethod: null,
+          };
         } else {
           status = 'Unpaid';
-          extra = { fineAmount: fine, finePaid: false, mpesaCode: null, paidDate: null, paymentMethod: null };
+          extra = { fineAmount: fine, finePaid: fineSettled, mpesaCode: null, paidDate: null, paymentMethod: null };
         }
 
         const base = {
@@ -240,7 +255,6 @@ export function ContributionsContent() {
           purpose: 'monthly' as const,
           month: ledgerMonth,
           amount,
-          fineAmount: fine,
           updatedAt: Date.now(),
         };
 
@@ -351,7 +365,9 @@ export function ContributionsContent() {
   if (loading) return <Loading />;
 
   const currentContribs = contributions.filter(c => c.purpose === activeTab);
-  const totalCollected = currentContribs.filter(c => c.status === 'Paid').reduce((s, c) => s + c.amount + c.fineAmount, 0);
+  const totalCollected = currentContribs
+    .filter(c => c.status === 'Paid')
+    .reduce((s, c) => s + c.amount + (c.finePaid ? c.fineAmount : 0), 0);
   const pendingCount = currentContribs.filter(c => c.status === 'Pending').length;
   const unpaidCount = currentContribs.filter(c => c.status === 'Unpaid' || c.status === 'Late').length;
 
@@ -902,7 +918,9 @@ function LedgerEntryModal({
                 {row.member.name}
                 {row.member.secondary && <span className="ml-1 text-xs text-amber-600">(secondary)</span>}
               </p>
-              <div className="flex bg-stone-100 rounded-lg p-0.5">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-stone-400">Contribution</span>
+                <div className="flex bg-stone-100 rounded-lg p-0.5">
                 {(['skip', 'paid', 'unpaid'] as const).map(mode => (
                   <button
                     key={mode}
@@ -915,24 +933,39 @@ function LedgerEntryModal({
                     {mode}
                   </button>
                 ))}
+                </div>
               </div>
             </div>
             {row.mode !== 'skip' && (
               <div className="grid grid-cols-2 gap-2">
-                <Input label="Amount" type="number" inputMode="numeric" value={row.amount} onChange={e => onUpdate(idx, { amount: e.target.value })} />
+                <Input label="Contribution" type="number" inputMode="numeric" value={row.amount} onChange={e => onUpdate(idx, { amount: e.target.value })} />
                 <Input label="Fine" type="number" inputMode="numeric" value={row.fine} onChange={e => onUpdate(idx, { fine: e.target.value })} />
-                {row.mode === 'paid' && (parseFloat(row.fine) || 0) > 0 && (
-                  <label className="col-span-2 flex items-center gap-2 text-xs text-stone-600 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={row.finePaid}
-                      onChange={e => onUpdate(idx, { finePaid: e.target.checked })}
-                      className="h-4 w-4 accent-amber-700"
-                    />
-                    Fine of {row.fine} was also paid
-                    {!row.finePaid && <span className="text-red-500">— stays owed</span>}
-                  </label>
+
+                {/* The fine is settled separately from the contribution — a member
+                    can pay one and not the other, in either direction. */}
+                {(parseFloat(row.fine) || 0) > 0 && (
+                  <div className="col-span-2 flex items-center justify-between gap-2 rounded-lg bg-stone-50 px-3 py-2">
+                    <span className="text-xs text-stone-600">
+                      Fine of {formatKES(parseFloat(row.fine) || 0)} is
+                    </span>
+                    <div className="flex bg-white border border-stone-200 rounded-lg p-0.5">
+                      {([false, true] as const).map(paidState => (
+                        <button
+                          key={String(paidState)}
+                          type="button"
+                          onClick={() => onUpdate(idx, { finePaid: paidState })}
+                          className={`px-3 py-1 text-xs font-medium rounded-md transition-colors
+                            ${row.finePaid === paidState
+                              ? paidState ? 'bg-emerald-600 text-white' : 'bg-red-500 text-white'
+                              : 'text-stone-400'}`}
+                        >
+                          {paidState ? 'Paid' : 'Owed'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
+
                 {row.mode === 'paid' && (
                   <>
                     <Select
@@ -973,7 +1006,11 @@ function ContributionRow({
         </p>
         <p className="text-xs text-stone-400">
           {formatKES(c.amount)}
-          {c.fineAmount > 0 && <span className="text-red-500"> + {formatKES(c.fineAmount)} fine</span>}
+          {c.fineAmount > 0 && (
+            <span className={c.finePaid ? 'text-stone-400' : 'text-red-500'}>
+              {' '}+ {formatKES(c.fineAmount)} fine{c.finePaid ? ' (paid)' : ' owed'}
+            </span>
+          )}
         </p>
         {c.mpesaCode && (c.status === 'Pending' || c.status === 'Paid') && (
           <p className="text-xs text-stone-400">M-Pesa: <span className="font-mono text-amber-600">{c.mpesaCode}</span></p>
@@ -984,6 +1021,9 @@ function ContributionRow({
         <Badge variant={c.status === 'Paid' ? 'success' : c.status === 'Pending' ? 'info' : c.status === 'Late' ? 'danger' : 'warning'}>
           {c.status}
         </Badge>
+        {c.status === 'Paid' && c.fineAmount > 0 && !c.finePaid && (
+          <Badge variant="danger">Fine owed</Badge>
+        )}
         {isOwn && (c.status === 'Unpaid' || c.status === 'Late') && (
           <button onClick={onSubmit} className="text-xs text-emerald-600 hover:text-emerald-700 font-medium px-1">Pay</button>
         )}
