@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { useAutoDues } from '@/lib/use-auto-dues';
+import { useAutoFines } from '@/lib/use-auto-fines';
 import { BottomNav } from './bottom-nav';
 import { TopBar } from './top-bar';
 import { PageLoading } from '../ui/loading';
@@ -17,6 +18,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // From the automation month (AGM) onward, any visit generates the current
   // month's dues if missing — see src/lib/use-auto-dues.ts.
   useAutoDues(user);
+  // ...and fines whatever is still unpaid past the cutoff. Previously this only
+  // ran on the Contributions screen, so a fine depended on someone opening it.
+  useAutoFines(user);
 
   useEffect(() => {
     if (!loading && !user) {

@@ -104,6 +104,9 @@ export interface Contribution {
    * all-or-nothing — hydrateContribution defaults those to `status === 'Paid'`.
    */
   finePaid?: boolean;
+  /** When the member submitted their M-Pesa code. Lateness is judged on this,
+   *  not on when a treasurer got round to verifying. */
+  submittedAt?: number;
   mpesaCode?: string;
   mpesaMessage?: string;
   treasurerMpesaCode?: string;

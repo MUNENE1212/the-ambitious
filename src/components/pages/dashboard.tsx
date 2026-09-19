@@ -249,6 +249,7 @@ export function DashboardContent() {
         status: 'Pending',
         mpesaCode: code,
         mpesaMessage: mpesaInput.trim(),
+        submittedAt: Date.now(),
         updatedAt: Date.now(),
       });
       showToast('Payment submitted for verification');

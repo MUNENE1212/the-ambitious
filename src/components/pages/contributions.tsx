@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot, addDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Contribution, ContributionStatus, Fine, Member, PaymentMethod, hydrateMember, hydrateContribution } from '@/lib/types';
@@ -8,7 +8,7 @@ import { useAuth } from '@/lib/auth-context';
 import { useSettings } from '@/lib/hooks';
 import { canVerifyPayments, isSavingsGroupMember } from '@/lib/roles';
 import { extractMpesaCode } from '@/lib/mpesa';
-import { contributionCutoffDate, findOverdueContributions } from '@/lib/fines';
+import { contributionCutoffDate } from '@/lib/fines';
 import { currentGroupYear, currentMonthKey, groupYearForMonth, groupYearLabel, monthsInGroupYear, rateFor } from '@/lib/groupYear';
 import { formatKES } from '@/lib/financial';
 import { arrearsForAll, groupArrears } from '@/lib/arrears';
@@ -59,11 +59,14 @@ export function ContributionsContent() {
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [verifyContrib, setVerifyContrib] = useState<Contribution | null>(null);
   const [treasurerMpesaInput, setTreasurerMpesaInput] = useState('');
+  // Whether the payment being verified also covered the fine. Defaults to true
+  // (the member is billed the full total) but the treasurer can say otherwise —
+  // paying the dues and skipping the fine is common.
+  const [fineIncluded, setFineIncluded] = useState(true);
   const [verifying, setVerifying] = useState(false);
 
   const [generating, setGenerating] = useState(false);
   const canVerify = canVerifyPayments(user);
-  const fineCheckDone = useRef(false);
 
   // Month manager + ledger entry (treasurer backfill)
   const [showMonths, setShowMonths] = useState(false);
@@ -89,21 +92,6 @@ export function ContributionsContent() {
     }));
     return () => unsubs.forEach(u => u());
   }, []);
-
-  // Auto-fine sweep: monthly dues unpaid past the cutoff (5th of the following month by default)
-  useEffect(() => {
-    if (loading || fineCheckDone.current || contributions.length === 0) return;
-    fineCheckDone.current = true;
-    const overdue = findOverdueContributions(contributions, settings.contributionCutoffDay);
-    overdue.forEach(c => {
-      updateDoc(doc(db, 'contributions', c.id), {
-        status: 'Late',
-        fineAmount: settings.lateContributionFine,
-        updatedAt: Date.now(),
-      });
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, contributions]);
 
   const activeMembers = members.filter(m => m.active && isSavingsGroupMember(m));
 
@@ -275,6 +263,7 @@ export function ContributionsContent() {
         status: 'Pending',
         mpesaCode: code,
         mpesaMessage: mpesaInput.trim(),
+        submittedAt: Date.now(),
         updatedAt: Date.now(),
       });
       showToast('Payment submitted for verification');
@@ -307,6 +296,7 @@ export function ContributionsContent() {
     try {
       await updateDoc(doc(db, 'contributions', verifyContrib.id), {
         status: 'Paid',
+        finePaid: verifyContrib.fineAmount === 0 ? true : fineIncluded,
         paidDate: format(new Date(), 'yyyy-MM-dd'),
         verifiedBy: user.id,
         verifiedAt: Date.now(),
@@ -318,6 +308,7 @@ export function ContributionsContent() {
       setShowVerifyModal(false);
       setVerifyContrib(null);
       setTreasurerMpesaInput('');
+      setFineIncluded(true);
     } catch {
       showToast('Failed to verify', 'error');
     }
@@ -338,6 +329,7 @@ export function ContributionsContent() {
       setShowVerifyModal(false);
       setVerifyContrib(null);
       setTreasurerMpesaInput('');
+      setFineIncluded(true);
     } catch {
       showToast('Failed to reject', 'error');
     }
@@ -544,7 +536,7 @@ export function ContributionsContent() {
                     </p>
                   </div>
                   {canVerify && !isOwnContrib && (
-                    <Button size="sm" onClick={() => { setVerifyContrib(c); setShowVerifyModal(true); }}>Verify</Button>
+                    <Button size="sm" onClick={() => { setVerifyContrib(c); setFineIncluded(true); setShowVerifyModal(true); }}>Verify</Button>
                   )}
                   {canVerify && isOwnContrib && <span className="text-xs text-stone-400 italic">Cannot self-verify</span>}
                 </div>
@@ -584,7 +576,7 @@ export function ContributionsContent() {
                       isOwn={c.memberId === user?.id}
                       canVerify={canVerify}
                       onSubmit={() => { setSelectedContrib(c); setShowSubmitModal(true); }}
-                      onVerify={() => { setVerifyContrib(c); setShowVerifyModal(true); }}
+                      onVerify={() => { setVerifyContrib(c); setFineIncluded(true); setShowVerifyModal(true); }}
                     />
                   ))}
                 </div>
@@ -660,7 +652,7 @@ export function ContributionsContent() {
               <p>Member: <strong>{verifyContrib.memberName}</strong></p>
               <p>Amount: <strong>{formatKES(verifyContrib.amount)}</strong></p>
               {verifyContrib.fineAmount > 0 && <p>Fine: <strong className="text-red-500">{formatKES(verifyContrib.fineAmount)}</strong></p>}
-              <p>Total: <strong className="text-amber-700">{formatKES(verifyContrib.amount + verifyContrib.fineAmount)}</strong></p>
+              <p>Total due: <strong className="text-amber-700">{formatKES(verifyContrib.amount + verifyContrib.fineAmount)}</strong></p>
               {verifyContrib.mpesaCode && <p className="mt-2">Member&apos;s code: <strong className="text-amber-700 font-mono">{verifyContrib.mpesaCode}</strong></p>}
             </div>
             <Textarea
@@ -681,6 +673,24 @@ export function ContributionsContent() {
                   </span>
                 )}
               </div>
+            )}
+            {verifyContrib.fineAmount > 0 && (
+              <label className="flex items-start gap-2 rounded-lg border border-stone-200 p-3 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={fineIncluded}
+                  onChange={e => setFineIncluded(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-amber-700"
+                />
+                <span>
+                  This payment includes the {formatKES(verifyContrib.fineAmount)} fine
+                  <span className="block text-xs text-stone-500 mt-0.5">
+                    {fineIncluded
+                      ? `Expect ${formatKES(verifyContrib.amount + verifyContrib.fineAmount)}.`
+                      : `Only ${formatKES(verifyContrib.amount)} received — the fine stays owed and shows under Owed.`}
+                  </span>
+                </span>
+              </label>
             )}
             <div className="flex gap-2">
               <Button type="button" variant="danger" onClick={handleReject} loading={verifying} className="flex-1">Reject</Button>
