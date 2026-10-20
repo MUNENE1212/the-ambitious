@@ -54,6 +54,15 @@ firebase.json
 # Real membership roster — personal data, never committed
 scripts/roster.local.json
 
+# Firestore snapshots from scripts/backup-snapshot.mjs — contain phone numbers
+# and PIN hashes, never committed
+/backups
+
 # Local agent/assistant guidance (not part of the project)
 CLAUDE.md
 AGENTS.md
+
+# Research scratch — saved HTML/text pulled during regulatory research
+k.out
+kl.html
+*.debug.log

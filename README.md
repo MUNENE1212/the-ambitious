@@ -24,7 +24,7 @@ See [`PLAN.md`](./PLAN.md) for the product/technical blueprint this build follow
 - **Recharts** for the funds trend chart
 - **bcryptjs** for PIN hashing
 
-Node 20 is required (`.nvmrc`) — run `nvm use 20` before installing.
+Node 24 LTS is required (`.nvmrc`) — run `nvm use 24` before installing.
 
 ## Setup
 
@@ -47,7 +47,7 @@ Fill in your Firebase credentials in `.env.local`.
 ### 3. Install & Run
 
 ```bash
-nvm use 20
+nvm use 24
 npm install
 npm run dev
 ```
