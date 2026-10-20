@@ -3,16 +3,27 @@
  * Run: npm run emulators:seed  (with emulators already running)
  */
 
-import { initializeApp } from 'firebase/app';
-import { getFirestore, connectFirestoreEmulator, collection, addDoc, setDoc, doc } from 'firebase/firestore';
 import bcrypt from 'bcryptjs';
+import { adminFirestore } from './admin-db.mjs';
 
-const app = initializeApp({ apiKey: 'demo-key', projectId: 'demo-project' });
-const db = getFirestore(app);
-connectFirestoreEmulator(db, '127.0.0.1', 8080);
+// Admin SDK, because `secrets/` is denied to clients by firestore.rules and
+// this script has to seed the PIN hashes the login endpoint reads.
+const db = adminFirestore({ emulator: true });
 
 const pin = await bcrypt.hash('1234', 10);
 const now = Date.now();
+
+/** Create a member and put its PIN hash in the rules-denied secrets/ doc. */
+async function createMember(fields) {
+  const ref = await db.collection('members').add({
+    failedAttempts: 0, lockedUntil: null, active: true, ...fields,
+    createdAt: now, updatedAt: now,
+  });
+  await db.collection('secrets').doc(ref.id).set({
+    pinHash: pin, failedAttempts: 0, lockedUntil: null, migratedAt: now,
+  });
+  return ref;
+}
 
 function daysAgo(n) {
   const d = new Date();
@@ -28,39 +39,39 @@ function monthKey(n = 0) {
 async function seed() {
   console.log('Seeding emulator...\n');
 
-  const admin = await addDoc(collection(db, 'members'), {
+  const admin = await createMember({
     name: 'Jane Wanjiku', phone: '+254712000001', role: 'admin',
-    pinHash: pin, mustChangePin: false, titles: ['chairperson'], secondary: false,
-    failedAttempts: 0, lockedUntil: null, active: true, joinedAt: daysAgo(400), createdAt: now, updatedAt: now,
+    mustChangePin: false, titles: ['chairperson'], secondary: false,
+    joinedAt: daysAgo(400),
   });
-  const treasurer = await addDoc(collection(db, 'members'), {
+  const treasurer = await createMember({
     name: 'Mary Akinyi', phone: '+254712000003', role: 'member',
-    pinHash: pin, mustChangePin: false, titles: ['treasurer'], secondary: false,
-    failedAttempts: 0, lockedUntil: null, active: true, joinedAt: daysAgo(400), createdAt: now, updatedAt: now,
+    mustChangePin: false, titles: ['treasurer'], secondary: false,
+    joinedAt: daysAgo(400),
   });
-  const secretary = await addDoc(collection(db, 'members'), {
+  const secretary = await createMember({
     name: 'James Mwangi', phone: '+254712000004', role: 'member',
-    pinHash: pin, mustChangePin: false, titles: ['secretary'], secondary: false,
-    failedAttempts: 0, lockedUntil: null, active: true, joinedAt: daysAgo(400), createdAt: now, updatedAt: now,
+    mustChangePin: false, titles: ['secretary'], secondary: false,
+    joinedAt: daysAgo(400),
   });
-  const discipline = await addDoc(collection(db, 'members'), {
+  const discipline = await createMember({
     name: 'Peter Ochieng', phone: '+254712000002', role: 'member',
-    pinHash: pin, mustChangePin: false, titles: ['disciplineMaster'], secondary: false,
-    failedAttempts: 0, lockedUntil: null, active: true, joinedAt: daysAgo(400), createdAt: now, updatedAt: now,
+    mustChangePin: false, titles: ['disciplineMaster'], secondary: false,
+    joinedAt: daysAgo(400),
   });
-  const member1 = await addDoc(collection(db, 'members'), {
+  const member1 = await createMember({
     name: 'Grace Njeri', phone: '+254712000005', role: 'member',
-    pinHash: pin, mustChangePin: false, titles: [], secondary: false,
-    failedAttempts: 0, lockedUntil: null, active: true, joinedAt: daysAgo(200), createdAt: now, updatedAt: now,
+    mustChangePin: false, titles: [], secondary: false,
+    joinedAt: daysAgo(200),
   });
-  const member2 = await addDoc(collection(db, 'members'), {
+  const member2 = await createMember({
     name: 'David Kipchoge', phone: '+254712000006', role: 'member',
-    pinHash: pin, mustChangePin: false, titles: [], secondary: false,
-    failedAttempts: 0, lockedUntil: null, active: true, joinedAt: daysAgo(200), createdAt: now, updatedAt: now,
+    mustChangePin: false, titles: [], secondary: false,
+    joinedAt: daysAgo(200),
   });
   console.log('6 members created');
 
-  await setDoc(doc(db, 'config', 'settings'), {
+  await db.collection('config').doc('settings').set({
     groupName: 'Young & Ambitious Self Help Group', groupShortName: 'Y&A',
     entryFee: 5000, monthlyContributionPrimary: 500, monthlyContributionSecondary: 900,
     meetingFee: 100, memberCap: 20,
@@ -83,7 +94,7 @@ async function seed() {
     for (const m of roster) {
       const late = monthsAgo === 1 && m.id === member1.id;
       const status = monthsAgo === 1 ? 'Paid' : (m.id === member2.id ? 'Pending' : m.id === member1.id ? 'Unpaid' : 'Paid');
-      await addDoc(collection(db, 'contributions'), {
+      await db.collection('contributions').add({
         memberId: m.id, memberName: m.name, purpose: 'monthly', month,
         amount: 500, fineAmount: late ? 200 : 0, status,
         ...(status === 'Paid' ? {
@@ -97,45 +108,45 @@ async function seed() {
   }
   console.log('Monthly dues created (2 months x 6 members)');
 
-  await addDoc(collection(db, 'fines'), {
+  await db.collection('fines').add({
     memberId: member1.id, memberName: 'Grace Njeri', type: 'lateContribution', amount: 200,
     reason: 'Late monthly contribution', waived: false,
     createdBy: treasurer.id, createdByName: 'Mary Akinyi', createdAt: now - 20 * 86400000,
   });
   console.log('Fines created (1)');
 
-  await addDoc(collection(db, 'expenses'), {
+  await db.collection('expenses').add({
     date: daysAgo(5), category: 'AGM Party', amount: 1500, notes: 'Venue deposit for AGM',
     paymentMethod: 'Mpesa', status: 'verified', votes: [], seenBy: [{ memberId: admin.id, memberName: 'Jane Wanjiku', seenAt: now }],
     recordedBy: treasurer.id, recordedByName: 'Mary Akinyi', createdAt: now - 5 * 86400000,
   });
-  await addDoc(collection(db, 'expenses'), {
+  await db.collection('expenses').add({
     date: daysAgo(2), category: 'Welfare', amount: 1000, notes: 'Condolence contribution — nuclear family bereavement',
     paymentMethod: 'Cash', status: 'verified', votes: [], seenBy: [],
     recordedBy: discipline.id, recordedByName: 'Peter Ochieng', createdAt: now - 2 * 86400000,
   });
   console.log('Expenses created (2)');
 
-  await addDoc(collection(db, 'bankTransactions'), {
+  await db.collection('bankTransactions').add({
     type: 'deposit', amount: 5000, date: daysAgo(6), description: 'Cash contributions banked',
     status: 'approved', approvals: [], seenBy: [], recordedBy: treasurer.id, recordedByName: 'Mary Akinyi', createdAt: now - 6 * 86400000,
   });
   console.log('Bank transactions created (1)');
 
-  await addDoc(collection(db, 'investments'), {
+  await db.collection('investments').add({
     title: 'Poultry co-investment', description: 'Joint venture with a member-run poultry business',
     amountInvested: 15000, expectedReturn: 21000, status: 'active',
     recordedBy: admin.id, recordedByName: 'Jane Wanjiku', createdAt: now - 15 * 86400000, updatedAt: now - 15 * 86400000,
   });
   console.log('Investments created (1)');
 
-  await addDoc(collection(db, 'forumPosts'), {
+  await db.collection('forumPosts').add({
     title: 'AGM date confirmed — 20th October', body: 'This year\'s Annual General Meeting is confirmed for 20 October, physical attendance required.',
     category: 'Announcement', pinned: true, authorId: admin.id, authorName: 'Jane Wanjiku', authorTitles: ['chairperson'],
     replies: [{ id: 'r0', body: 'Noted, thank you!', authorId: member1.id, authorName: 'Grace Njeri', authorTitles: [], createdAt: now - 86400000 }],
     createdAt: now - 2 * 86400000,
   });
-  await addDoc(collection(db, 'forumPosts'), {
+  await db.collection('forumPosts').add({
     title: 'Should we expand the poultry co-investment?', body: 'Our current flock is doing well. Proposal to double the investment next quarter.',
     category: 'Proposal', pinned: false, authorId: admin.id, authorName: 'Jane Wanjiku', authorTitles: ['chairperson'],
     replies: [

@@ -20,34 +20,18 @@
  * by a second run could never be removed, only deactivated.
  */
 
-import { initializeApp } from 'firebase/app';
-import { getFirestore, connectFirestoreEmulator, collection, addDoc, getDocs } from 'firebase/firestore';
 import bcrypt from 'bcryptjs';
 import { readFileSync } from 'fs';
+import { loadEnv, adminFirestore } from './admin-db.mjs';
 
 const EMULATOR = process.argv.slice(2).includes('--emulator');
 
-try {
-  const envFile = readFileSync('.env.local', 'utf8');
-  envFile.split('\n').forEach(line => {
-    const [key, ...vals] = line.split('=');
-    if (key && vals.length) process.env[key.trim()] = vals.join('=').trim();
-  });
-} catch {
-  // .env.local not found, use process env
-}
+loadEnv();
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-};
-
-if (!EMULATOR && (!firebaseConfig.apiKey || !firebaseConfig.projectId)) {
-  console.error('Missing Firebase config. Create a .env.local file with your Firebase credentials, or pass --emulator.');
+if (!EMULATOR && !process.env.FIREBASE_PROJECT_ID && !process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
+  console.error(
+    'Missing Firebase config. Create a .env.local file with FIREBASE_PROJECT_ID and a service-account key, or pass --emulator.'
+  );
   process.exit(1);
 }
 
@@ -68,19 +52,20 @@ if (!Array.isArray(ROSTER) || ROSTER.length === 0) {
 
 let db;
 if (EMULATOR) {
-  // Same demo project id the app uses under NEXT_PUBLIC_USE_EMULATORS (src/lib/firebase.ts).
-  db = getFirestore(initializeApp({ apiKey: 'demo-key', projectId: 'demo-project' }));
-  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+  db = adminFirestore({ emulator: true });
   console.log('Targeting the Firestore emulator at 127.0.0.1:8080\n');
 } else {
-  db = getFirestore(initializeApp(firebaseConfig));
-  console.log(`Targeting Firestore project ${firebaseConfig.projectId} (production)\n`);
+  db = adminFirestore({ label: 'seed-members' });
+  console.log(
+    `Targeting Firestore project ${process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID} (production)\n`
+  );
 }
 
 async function seed() {
   const pinHash = await bcrypt.hash('0000', 10);
+  const now = Date.now();
   const existing = new Set(
-    (await getDocs(collection(db, 'members'))).docs
+    (await db.collection('members').get()).docs
       .map(d => String(d.data().name ?? '').trim().toLowerCase())
   );
 
@@ -95,11 +80,10 @@ async function seed() {
       continue;
     }
     const phone = `+254700000${String(i).padStart(3, '0')}`;
-    await addDoc(collection(db, 'members'), {
+    const member = await db.collection('members').add({
       name,
       phone,
       role: 'member',
-      pinHash,
       mustChangePin: true,
       titles: [],
       secondary: false,
@@ -107,8 +91,15 @@ async function seed() {
       lockedUntil: null,
       active: true,
       joinedAt: new Date().toISOString().slice(0, 10),
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
+    });
+    // Hash goes to secrets/, which the rules deny to every client.
+    await db.collection('secrets').doc(member.id).set({
+      pinHash,
+      failedAttempts: 0,
+      lockedUntil: null,
+      migratedAt: now,
     });
     console.log(`Created ${name} — placeholder phone ${phone}, PIN 0000`);
     created++;

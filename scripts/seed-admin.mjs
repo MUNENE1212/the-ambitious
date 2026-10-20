@@ -10,69 +10,48 @@
  * Idempotent: an existing admin or settings doc is left untouched.
  */
 
-import { initializeApp } from 'firebase/app';
-import {
-  getFirestore, connectFirestoreEmulator, collection, addDoc, getDocs,
-  query, where, limit, setDoc, doc, getDoc,
-} from 'firebase/firestore';
 import bcrypt from 'bcryptjs';
-import { readFileSync } from 'fs';
+import { loadEnv, adminFirestore } from './admin-db.mjs';
 
 const EMULATOR = process.argv.slice(2).includes('--emulator');
 
-// Try to load .env.local
-try {
-  const envFile = readFileSync('.env.local', 'utf8');
-  envFile.split('\n').forEach(line => {
-    const [key, ...vals] = line.split('=');
-    if (key && vals.length) {
-      process.env[key.trim()] = vals.join('=').trim();
-    }
-  });
-} catch {
-  // .env.local not found, use process env
-}
-
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-};
+loadEnv();
 
 let db;
 if (EMULATOR) {
-  // Same demo project id the app uses under NEXT_PUBLIC_USE_EMULATORS (src/lib/firebase.ts).
-  db = getFirestore(initializeApp({ apiKey: 'demo-key', projectId: 'demo-project' }));
-  connectFirestoreEmulator(db, '127.0.0.1', 8080);
+  db = adminFirestore({ emulator: true });
   console.log('Targeting the Firestore emulator at 127.0.0.1:8080\n');
 } else {
-  if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-    console.error('Missing Firebase config. Create a .env.local file with your Firebase credentials, or pass --emulator.');
+  if (!process.env.FIREBASE_PROJECT_ID && !process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) {
+    console.error(
+      'Missing Firebase config. Create a .env.local file with FIREBASE_PROJECT_ID and a service-account key, or pass --emulator.'
+    );
     process.exit(1);
   }
-  db = getFirestore(initializeApp(firebaseConfig));
-  console.log(`Targeting Firestore project ${firebaseConfig.projectId} (production)\n`);
+  db = adminFirestore({ label: 'seed-admin' });
+  console.log(
+    `Targeting Firestore project ${process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID} (production)\n`
+  );
 }
 
 async function seed() {
   // --- Admin user (idempotent) ---
   const ADMIN_PHONE = '+254700000000';
-  const existingAdmin = await getDocs(
-    query(collection(db, 'members'), where('phone', '==', ADMIN_PHONE), limit(1))
-  );
+  const existingAdmin = await db
+    .collection('members')
+    .where('phone', '==', ADMIN_PHONE)
+    .limit(1)
+    .get();
 
   if (!existingAdmin.empty) {
     console.log(`Admin already exists (${existingAdmin.docs[0].id}) — left untouched.`);
   } else {
     const pinHash = await bcrypt.hash('1234', 10);
-    const admin = await addDoc(collection(db, 'members'), {
+    const now = Date.now();
+    const admin = db.collection('members').add({
       name: 'Admin',
       phone: ADMIN_PHONE,
       role: 'admin',
-      pinHash,
       mustChangePin: true,
       titles: [],
       secondary: false,
@@ -80,11 +59,23 @@ async function seed() {
       failedAttempts: 0,
       lockedUntil: null,
       active: true,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
     });
 
-    console.log(`Admin user created with ID: ${admin.id}`);
+    // The hash lives in secrets/, never in members/ — a member document is
+    // readable by any client the rules allow, so nothing that grants access
+    // belongs in one. See scripts/migrate-secrets.mjs for the split.
+    await admin.then((ref) =>
+      db.collection('secrets').doc(ref.id).set({
+        pinHash,
+        failedAttempts: 0,
+        lockedUntil: null,
+        migratedAt: now,
+      })
+    );
+
+    console.log(`Admin user created with ID: ${(await admin).id}`);
     console.log(`Phone: ${ADMIN_PHONE}`);
     console.log('PIN: 1234');
     console.log('\nChange these credentials after first login!');
@@ -93,13 +84,13 @@ async function seed() {
   // --- Default settings (idempotent) ---
   // Keep this object in sync with DEFAULT_SETTINGS in src/lib/constants.ts —
   // every figure comes from the Y&A constitution and stays editable in Settings.
-  const settingsRef = doc(db, 'config', 'settings');
-  if ((await getDoc(settingsRef)).exists()) {
+  const settingsRef = db.collection('config').doc('settings');
+  if ((await settingsRef.get()).exists) {
     console.log('\nSettings doc already exists — left untouched (edit it in Settings).');
     process.exit(0);
   }
 
-  await setDoc(settingsRef, {
+  await settingsRef.set({
     groupName: 'Young & Ambitious Self Help Group',
     groupShortName: 'Y&A',
 

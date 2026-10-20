@@ -1,15 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, query, onSnapshot, addDoc, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Member, Role, MemberTitle, hydrateMember } from '@/lib/types';
 import { ALL_TITLES, TITLE_LABELS } from '@/lib/constants';
 import { useAuth } from '@/lib/auth-context';
 import { useSettings } from '@/lib/hooks';
+import { useToast } from '@/components/ui/toast';
 import { canAdminister } from '@/lib/roles';
 import { createExitRequest } from '@/lib/exit-actions';
-import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -19,8 +19,27 @@ import { Modal } from '@/components/ui/modal';
 import { Badge } from '@/components/ui/badge';
 import { Loading } from '@/components/ui/loading';
 import Link from 'next/link';
-import { format } from 'date-fns';
-import bcrypt from 'bcryptjs';
+
+/**
+ * Member administration goes through /api/admin/*, not straight to Firestore.
+ *
+ * This page used to hash PINs in the browser and write them into the member
+ * document. Combined with `allow update: if true` in the rules, that meant any
+ * member could reset the treasurer's PIN or set their own `role` to admin. The
+ * server re-checks the caller's role and hashes the PIN where the browser can
+ * never see it.
+ */
+async function adminAction<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify(body),
+  });
+  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
 
 export function AdminContent() {
   const { user } = useAuth();
@@ -61,14 +80,6 @@ export function AdminContent() {
     });
   }, []);
 
-  const normalizePhone = (p: string) => {
-    const cleaned = p.replace(/\s/g, '');
-    if (cleaned.startsWith('0')) return '+254' + cleaned.slice(1);
-    if (cleaned.startsWith('254')) return '+' + cleaned;
-    if (cleaned.startsWith('+254')) return cleaned;
-    return cleaned;
-  };
-
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) return;
@@ -84,42 +95,21 @@ export function AdminContent() {
 
     setSaving(true);
     try {
-      const normalized = normalizePhone(phone);
-      const pinHash = await bcrypt.hash(pin, 10);
-      const memberDoc = await addDoc(collection(db, 'members'), {
+      await adminAction('/api/admin/members', {
         name: name.trim(),
-        phone: normalized,
+        phone,
+        pin,
         role,
-        pinHash,
-        mustChangePin: true,
         titles: role !== 'manager' ? selectedTitles : [],
         secondary,
-        failedAttempts: 0,
-        lockedUntil: null,
-        active: true,
-        joinedAt: format(new Date(), 'yyyy-MM-dd'),
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      });
-
-      // Auto-invoice the entry fee (murangano) per the constitution
-      await addDoc(collection(db, 'contributions'), {
-        memberId: memberDoc.id,
-        memberName: name.trim(),
-        purpose: 'entryFee',
-        month: format(new Date(), 'yyyy-MM'),
-        amount: settings.entryFee,
-        fineAmount: 0,
-        status: 'Unpaid',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        entryFee: settings.entryFee,
       });
 
       showToast(`Member ${name.trim()} added — entry fee of KES ${settings.entryFee.toLocaleString()} invoiced`);
       setShowForm(false);
       setName(''); setPhone(''); setPin(''); setRole('member'); setSelectedTitles([]); setSecondary(false);
-    } catch {
-      showToast('Failed to add member', 'error');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to add member', 'error');
     }
     setSaving(false);
   };
@@ -127,33 +117,34 @@ export function AdminContent() {
   const toggleActive = async (member: Member) => {
     if (!isAdmin) return;
     try {
-      await updateDoc(doc(db, 'members', member.id), { active: !member.active, updatedAt: Date.now() });
+      await adminAction(`/api/admin/members/${member.id}`, {
+        action: member.active ? 'deactivate' : 'activate',
+      });
       showToast(`${member.name} ${member.active ? 'deactivated' : 'activated'}`);
-    } catch {
-      showToast('Failed to update', 'error');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to update', 'error');
     }
   };
 
   const resetPin = async (member: Member) => {
     if (!isAdmin) return;
     const newPin = prompt('Enter new 4-digit PIN:');
-    if (!newPin || newPin.length !== 4 || !/^\d{4}$/.test(newPin)) { showToast('Invalid PIN', 'error'); return; }
+    if (!newPin || !/^\d{4}$/.test(newPin)) { showToast('PIN must be 4 digits', 'error'); return; }
     try {
-      const pinHash = await bcrypt.hash(newPin, 10);
-      await updateDoc(doc(db, 'members', member.id), { pinHash, mustChangePin: true, failedAttempts: 0, lockedUntil: null, updatedAt: Date.now() });
-      showToast(`PIN reset for ${member.name}`);
-    } catch {
-      showToast('Failed to reset PIN', 'error');
+      await adminAction(`/api/admin/members/${member.id}`, { action: 'reset-pin', pin: newPin });
+      showToast(`PIN reset for ${member.name} — any existing sessions were signed out`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to reset PIN', 'error');
     }
   };
 
   const unlockAccount = async (member: Member) => {
     if (!isAdmin) return;
     try {
-      await updateDoc(doc(db, 'members', member.id), { failedAttempts: 0, lockedUntil: null, updatedAt: Date.now() });
+      await adminAction(`/api/admin/members/${member.id}`, { action: 'unlock' });
       showToast(`Account unlocked for ${member.name}`);
-    } catch {
-      showToast('Failed to unlock', 'error');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to unlock', 'error');
     }
   };
 
@@ -174,20 +165,19 @@ export function AdminContent() {
 
     setEditSaving(true);
     try {
-      const normalized = normalizePhone(editPhone);
-      await updateDoc(doc(db, 'members', editMember.id), {
+      await adminAction(`/api/admin/members/${editMember.id}`, {
+        action: 'update',
         name: editName.trim(),
-        phone: normalized,
+        phone: editPhone,
         role: editRole,
         titles: editRole === 'manager' ? [] : editTitles,
         secondary: editSecondary,
-        updatedAt: Date.now(),
       });
       showToast(`${editName.trim()} updated`);
       setShowEditModal(false);
       setEditMember(null);
-    } catch {
-      showToast('Failed to update member', 'error');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to update member', 'error');
     }
     setEditSaving(false);
   };

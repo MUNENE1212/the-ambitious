@@ -2,16 +2,53 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper: check if request comes from an authenticated session
-    // Since we use custom PIN auth (not Firebase Auth), we rely on
-    // Firestore rules being permissive for now.
-    // For production, implement Firebase Custom Tokens or Cloud Functions.
 
-    // Members collection
+    // =====================================================================
+    // CLOSED TO CLIENTS — no exception, no fallback, ever.
+    // =====================================================================
+    //
+    // `secrets` holds bcrypt PIN hashes and lockout counters. `sessions` holds
+    // hashed session tokens. Both are reached exclusively through the
+    // firebase-admin SDK in /api, which bypasses these rules by design.
+    //
+    // PIN hashes used to live in `members`, where `allow read: if true` meant
+    // anyone with the public Firebase config could dump all thirteen and crack
+    // a 4-digit PIN offline. Denying these two collections is the rules-side
+    // half of that fix; scripts/migrate-secrets.mjs is the data-side half.
+    match /secrets/{memberId} {
+      allow read, write: if false;
+    }
+
+    match /sessions/{sessionId} {
+      allow read, write: if false;
+    }
+
+    // =====================================================================
+    // STILL PERMISSIVE — deliberately, and temporarily.
+    // =====================================================================
+    //
+    // These rules are not a security boundary today; they are an audit-trail
+    // boundary (no deletes) plus a placeholder. They become real when:
+    //
+    //   1. the treasurer finishes the Jul-Sep 2026 backfill through the Ledger
+    //      Entry flow, which writes from the browser;
+    //   2. every money write moves to /api under firebase-admin (PLATFORM-PLAN
+    //      section 4.3, Gate 3), at which point `allow write: if false` lands.
+    //
+    // Until then the honest position is that `allow update: if true` is a real
+    // hole — any client could change a member's role or PIN. It is closed
+    // application-side today (admin actions go through /api/admin/* with a
+    // server-side role check) and rules-side in Gate 3.
+    //
+    // For per-member authorization, rules need `request.auth`, which means
+    // Firebase Auth custom tokens — phase 2 of PLATFORM-PLAN section 4.2.
+    // Until then, reads stay permissive and authority is enforced in the API.
+
+    // Members
     match /members/{memberId} {
       allow read: if true;
       allow create, update: if true;
-      // No delete allowed
+      // No delete allowed — audit trail requirement
       allow delete: if false;
     }
 

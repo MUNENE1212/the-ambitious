@@ -60,15 +60,20 @@ export interface Member {
   name: string;
   phone: string; // +254...
   role: Role;
-  pinHash: string;
   mustChangePin: boolean;
   titles: MemberTitle[];
   secondary: boolean; // minor/secondary member per constitution Section B — higher monthly dues
   representing?: string; // adult's profile: memberId of the secondary member they represent
   representedBy?: string; // secondary member's own profile (if one exists): the adult's memberId
-  failedAttempts: number;
-  lockedUntil: number | null;
-  isLocked: boolean; // computed at hydration: lockedUntil > Date.now()
+  /**
+   * Lockout state. Optional because it is deliberately absent from what the
+   * server returns for a signed-in member — it lives in the rules-denied
+   * `secrets` collection now. The admin screen gets it from
+   * /api/admin/members, which is the only place permitted to read it.
+   */
+  failedAttempts?: number;
+  lockedUntil?: number | null;
+  isLocked?: boolean;
   active: boolean;
   joinedAt: string; // YYYY-MM-DD
   createdAt: number;
