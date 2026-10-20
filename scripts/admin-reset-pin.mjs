@@ -256,7 +256,7 @@ async function lockPlaceholders(db, { actor }) {
 
   const now = Date.now();
   const batch = db.batch();
-  for (const { doc, data } of targets) {
+  for (const { doc } of targets) {
     // A PIN nobody is told. Its only job is to not be 0000.
     const pin = String(crypto.randomInt(1000, 10000));
     const pinHash = await bcrypt.hash(pin, 10);
