@@ -1,0 +1,839 @@
+<title>Young &amp; Ambitious</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/*
+  Direction: a co-operative's ledger book, rendered on a phone.
+  Ledger paper in light, navy ink at night, gold for anything that is money
+  or a milestone. Fraunces carries the headings because the subject is a book
+  of record; Archivo keeps running text plain; IBM Plex Mono does the figures,
+  the way a treasurer's column of shillings is always monospaced.
+
+  The whole page is a set of tabs so it can be walked through in a meeting
+  without scrolling hunting for the next point.
+*/
+
+:root {
+  --paper:      #FAF6EC;
+  --surface:    #FFFDF8;
+  --surface-2:  #F3ECDC;
+  --ink:        #101B36;
+  --muted:      #5C6579;
+  --navy:       #16264D;
+  --navy-soft:  #24365F;
+  --gold:       #9A6F16;
+  --gold-bright:#C79A2E;
+  --rule:       #E0D6C0;
+  --good:       #2F6B4F;
+  --warn:       #9A5B12;
+  --alert:      #9B2C2C;
+
+  --display: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --body: "Archivo", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --r: 10px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:      #0A1226;
+    --surface:    #111C36;
+    --surface-2:  #17233F;
+    --ink:        #F3EEE1;
+    --muted:      #98A3BC;
+    --navy:       #C9D4EC;
+    --navy-soft:  #9FB0D4;
+    --gold:       #E0B85C;
+    --gold-bright:#F0CE7C;
+    --rule:       #25324F;
+    --good:       #6FC49A;
+    --warn:       #E0A85C;
+    --alert:      #E88A8A;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper:      #0A1226;
+  --surface:    #111C36;
+  --surface-2:  #17233F;
+  --ink:        #F3EEE1;
+  --muted:      #98A3BC;
+  --navy:       #C9D4EC;
+  --navy-soft:  #9FB0D4;
+  --gold:       #E0B85C;
+  --gold-bright:#F0CE7C;
+  --rule:       #25324F;
+  --good:       #6FC49A;
+  --warn:       #E0A85C;
+  --alert:      #E88A8A;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+body::before {
+  content: ""; position: fixed; inset: 0 0 auto;
+  height: env(safe-area-inset-top, 0px); z-index: 10;
+  background: var(--navy);
+}
+
+.wrap { max-width: 940px; margin: 0 auto; padding-bottom: 64px; }
+
+/* ---------- masthead ---------- */
+
+.masthead {
+  background: var(--navy);
+  color: #F6F2E7;
+  margin-left: calc(-1 * max(16px, env(safe-area-inset-left, 0px)));
+  margin-right: calc(-1 * max(16px, env(safe-area-inset-right, 0px)));
+  padding: 32px 0 28px;
+  border-bottom: 3px solid var(--gold-bright);
+}
+.masthead .inner {
+  max-width: 940px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.mark {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
+}
+.mark svg { flex: none; }
+.mark-name {
+  font-family: var(--display); font-size: 1.05rem; font-weight: 600;
+  letter-spacing: .01em; color: #F6F2E7;
+}
+h1 {
+  font-family: var(--display); font-weight: 600;
+  font-size: clamp(2rem, 7vw, 3.1rem); line-height: 1.08;
+  letter-spacing: -.02em; margin: 0 0 14px;
+  color: #FDFAF2; text-wrap: balance;
+}
+h1 em { font-style: normal; color: var(--gold-bright); }
+.lede {
+  font-size: clamp(1rem, 3.6vw, 1.15rem); color: #C4CFE6;
+  max-width: 60ch; margin: 0 0 22px;
+}
+.mast-meta {
+  display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center;
+  font-family: var(--mono); font-size: .74rem; letter-spacing: .04em;
+}
+.chip-live {
+  background: var(--gold-bright); color: var(--navy);
+  padding: 4px 10px; border-radius: 999px; font-weight: 600;
+  text-transform: uppercase;
+}
+.mast-meta span:not(.chip-live) { color: #93A3C4; }
+
+/* ---------- tabs ---------- */
+
+nav.tabs {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 9;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  margin-left: calc(-1 * max(16px, env(safe-area-inset-left, 0px)));
+  margin-right: calc(-1 * max(16px, env(safe-area-inset-right, 0px)));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.tabs-inner {
+  max-width: 940px; margin: 0 auto;
+  display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none;
+}
+.tabs-inner::-webkit-scrollbar { display: none; }
+button.tab {
+  flex: none; appearance: none; background: none; border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 14px 14px 12px; cursor: pointer;
+  font-family: var(--body); font-size: .875rem; font-weight: 600;
+  color: var(--muted); white-space: nowrap;
+}
+button.tab:hover { color: var(--ink); }
+button.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--gold); }
+button.tab:focus-visible { outline: 2px solid var(--gold); outline-offset: -3px; }
+
+.theme-toggle {
+  flex: none; appearance: none; background: none; cursor: pointer;
+  border: 1px solid var(--rule); border-radius: 999px;
+  padding: 5px 10px; margin: 9px 0 9px 8px;
+  font-family: var(--mono); font-size: .7rem; color: var(--muted);
+}
+.theme-toggle:hover { border-color: var(--gold); color: var(--ink); }
+
+/* ---------- views ---------- */
+
+.view { display: none; padding-top: 28px; }
+.view.on { display: block; }
+
+h2 {
+  font-family: var(--display); font-weight: 600;
+  font-size: clamp(1.5rem, 5vw, 2rem); line-height: 1.15;
+  letter-spacing: -.015em; margin: 0 0 8px; text-wrap: balance;
+}
+h3 {
+  font-family: var(--display); font-weight: 600;
+  font-size: 1.12rem; margin: 0 0 6px; letter-spacing: -.01em;
+}
+.sec-intro {
+  color: var(--muted); max-width: 62ch; margin: 0 0 28px; font-size: .95rem;
+}
+
+.eyebrow {
+  font-family: var(--mono); font-size: .7rem; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase;
+  color: var(--gold); margin: 0 0 8px;
+}
+
+/* ---------- grid + cards ---------- */
+
+.grid { display: grid; gap: 14px; }
+@media (min-width: 700px) { .g2 { grid-template-columns: 1fr 1fr; } }
+@media (min-width: 700px) { .g3 { grid-template-columns: repeat(3, 1fr); } }
+
+.card {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: var(--r); padding: 18px;
+  min-width: 0;
+}
+.card p { margin: 0; color: var(--muted); font-size: .9rem; }
+.card ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: .88rem; }
+.card li { margin-bottom: 4px; }
+.card strong { color: var(--ink); font-weight: 600; }
+
+.card.accent { border-left: 3px solid var(--gold); }
+.card.money   { background: var(--surface-2); }
+
+/* ---------- formulas ---------- */
+
+.formula {
+  font-family: var(--mono); font-size: .78rem; line-height: 1.7;
+  background: var(--surface-2); border: 1px solid var(--rule);
+  border-radius: 6px; padding: 10px 12px; margin-top: 10px;
+  overflow-x: auto; white-space: pre; color: var(--ink);
+}
+.formula .op { color: var(--gold); }
+
+/* ---------- gates ---------- */
+
+.gate {
+  border-left: 3px solid var(--rule);
+  padding: 2px 0 2px 18px; margin-bottom: 22px;
+}
+.gate.done { border-left-color: var(--good); }
+.gate.now  { border-left-color: var(--gold); }
+.gate-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px;
+  margin-bottom: 6px;
+}
+.gate-tag {
+  font-family: var(--mono); font-size: .68rem; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 4px; white-space: nowrap;
+}
+.gate.done .gate-tag { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+.gate.now  .gate-tag { background: color-mix(in srgb, var(--gold) 20%, transparent); color: var(--gold); }
+.gate h3 { margin: 0; }
+.gate p { margin: 0 0 6px; color: var(--muted); font-size: .9rem; }
+.gate ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); font-size: .875rem; }
+.gate li { margin-bottom: 3px; }
+.gate li .tick { color: var(--good); font-weight: 600; }
+.gate li .todo { color: var(--warn); font-weight: 600; }
+
+/* ---------- proof list ---------- */
+
+.proof { list-style: none; margin: 0; padding: 0; }
+.proof li {
+  display: grid; grid-template-columns: 22px 1fr; gap: 12px;
+  padding: 13px 0; border-bottom: 1px solid var(--rule);
+  align-items: start;
+}
+.proof li:last-child { border-bottom: 0; }
+.proof .mk { color: var(--gold); font-weight: 700; line-height: 1.5; }
+.proof .t { font-weight: 600; display: block; margin-bottom: 2px; }
+.proof .d { color: var(--muted); font-size: .88rem; }
+
+/* ---------- alert ---------- */
+
+.notice {
+  border: 1px solid color-mix(in srgb, var(--alert) 40%, var(--rule));
+  background: color-mix(in srgb, var(--alert) 7%, var(--surface));
+  border-radius: var(--r); padding: 18px; margin-top: 8px;
+}
+.notice h3 { color: var(--alert); }
+.notice p { margin: 0 0 8px; color: var(--ink); font-size: .9rem; }
+.notice p:last-child { margin-bottom: 0; }
+
+/* ---------- instruments ---------- */
+
+.inst {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: var(--r); padding: 16px; position: relative; min-width: 0;
+}
+.inst .kind {
+  font-family: var(--mono); font-size: .68rem; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--gold); margin-bottom: 6px;
+}
+.inst p { margin: 0; font-size: .86rem; color: var(--muted); }
+
+/* ---------- footer ---------- */
+
+.foot {
+  margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--rule);
+  display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
+  font-family: var(--mono); font-size: .74rem; color: var(--muted);
+}
+.foot a { color: var(--gold); }
+
+.sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+.view.on > * { animation: rise .34s ease both; }
+.view.on > *:nth-child(2) { animation-delay: .05s; }
+.view.on > *:nth-child(3) { animation-delay: .1s; }
+.view.on > *:nth-child(4) { animation-delay: .15s; }
+.view.on > *:nth-child(5) { animation-delay: .2s; }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <div class="inner">
+    <div class="mark">
+      <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M16 28V15" stroke="#C79A2E" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M16 15C16 15 8 14 7 7c5-.6 9 1.4 9 8z" fill="#C79A2E"/>
+        <path d="M16 19c0 0 7-.9 8-7-4.6-.5-8 1.3-8 7z" fill="#E0B85C"/>
+      </svg>
+      <span class="mark-name">Young &amp; Ambitious</span>
+    </div>
+
+    <h1>The group's books,<br><em>open to everyone.</em></h1>
+
+    <p class="lede">
+      A savings group that stopped keeping its money in a shoebox and a notebook.
+      Every contribution, every shilling out, every vote — recorded once, in a
+      ledger the whole group can read.
+    </p>
+
+    <div class="mast-meta">
+      <span class="chip-live">Live</span>
+      <span>ambitious.emen.africa</span>
+      <span>·</span>
+      <span>13 members on the register</span>
+      <span>·</span>
+      <span>KES</span>
+      <span>·</span>
+      <span>+254</span>
+    </div>
+  </div>
+</header>
+
+<nav class="tabs" aria-label="Sections">
+  <div class="tabs-inner" role="tablist">
+    <button class="tab" role="tab" id="t-today"  aria-controls="v-today"  aria-selected="true">What works today</button>
+    <button class="tab" role="tab" id="t-proof"  aria-controls="v-proof"  aria-selected="false">What we hardened</button>
+    <button class="tab" role="tab" id="t-next"   aria-controls="v-next"   aria-selected="false">Where this goes</button>
+    <button class="tab" role="tab" id="t-law"    aria-controls="v-law"    aria-selected="false">The rules we hold to</button>
+    <button class="theme-toggle" id="theme" type="button">Theme</button>
+  </div>
+</nav>
+
+<!-- ============================ TODAY ============================ -->
+<main>
+<section class="view on" id="v-today" role="tabpanel" aria-labelledby="t-today">
+  <p class="eyebrow">Live at ambitious.emen.africa</p>
+  <h2>It already runs the group's money</h2>
+  <p class="sec-intro">
+    Not a prototype. The members on the register are contributing against it,
+    and every figure below is computed from records the app holds, not typed in
+    by hand.
+  </p>
+
+  <div class="grid g2" style="margin-bottom:32px">
+    <div class="card accent">
+      <h3>Joining takes a minute</h3>
+      <p>
+        A new member opens the app, types their first name, sees their own seat
+        confirmed, and sets their phone number and a four-digit PIN. No admin
+        has to register anyone.
+      </p>
+      <ul>
+        <li>Seat can only be claimed once, ever</li>
+        <li>Setting up replaces the placeholder login entirely</li>
+        <li>Claiming can never grant you a role</li>
+      </ul>
+    </div>
+
+    <div class="card accent">
+      <h3>Contributions, chased automatically</h3>
+      <p>
+        Monthly dues are raised on their own once the year starts. Late ones
+        pick up the fine the constitution specifies, and the treasurer can see
+        the month without asking anyone.
+      </p>
+      <ul>
+        <li>Rates differ for secondary members, per constitution</li>
+        <li>Meeting fees are tracked separately</li>
+        <li>Financial year runs July to June</li>
+      </ul>
+    </div>
+
+    <div class="card accent">
+      <h3>Money out needs two signatures</h3>
+      <p>
+        A withdrawal is typed in and stays pending until a second officer signs
+        it. The person who recorded it cannot be the one who approves it.
+      </p>
+      <ul>
+        <li>Bank balance ignores a withdrawal until it's signed</li>
+        <li>Every signature is stamped with who and when</li>
+      </ul>
+    </div>
+
+    <div class="card accent">
+      <h3>Leaving is a vote, not a favour</h3>
+      <p>
+        A member requests to exit from their profile. The app works out the
+        refund from what they actually paid, the group votes as active members,
+        and the payout closes the membership.
+      </p>
+      <ul>
+        <li>One member, one vote — never weighted by amount</li>
+        <li>Arrears deducted only if unwaived</li>
+        <li>You cannot vote on your own exit</li>
+      </ul>
+    </div>
+
+    <div class="card accent">
+      <h3>Announcements and proposals</h3>
+      <p>
+        Leadership posts announcements; anyone can reply. Proposals for
+        spending get threaded discussion before they reach a vote, and the
+        forum links back to the withdrawal they became.
+      </p>
+      <ul>
+        <li>Announcements can be pinned</li>
+        <li>Officer titles shown beside the author</li>
+      </ul>
+    </div>
+
+    <div class="card accent">
+      <h3>Meeting minutes do the work</h3>
+      <p>
+        Take minutes in the app. Once attendance is marked, the discipline
+        officer can raise absence fines straight from the record instead of
+        retyping the room.
+      </p>
+      <ul>
+        <li>Virtual and AGM meetings distinguished</li>
+        <li>Draft until the secretary marks it official</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="eyebrow">Where the group stands</p>
+  <h2>The four numbers that matter</h2>
+  <p class="sec-intro">
+    These are not stored totals. Each is derived from the underlying records by
+    a published formula, so any member can check the arithmetic against the
+    transactions behind it.
+  </p>
+
+  <div class="grid g2">
+    <div class="card money">
+      <h3>Cash on hand</h3>
+      <div class="formula"><span class="op">=</span> opening cash
++ bank withdrawals
+− cash expenses
+− bank deposits</div>
+    </div>
+    <div class="card money">
+      <h3>Bank balance</h3>
+      <div class="formula"><span class="op">=</span> opening bank
++ contributions collected
++ bank deposits
+− M-Pesa expenses
+− bank withdrawals</div>
+    </div>
+    <div class="card money">
+      <h3>Total group funds</h3>
+      <div class="formula"><span class="op">=</span> cash on hand
++ bank balance
++ investments value</div>
+    </div>
+    <div class="card money">
+      <h3>AGM Party Fund</h3>
+      <div class="formula"><span class="op">=</span> opening balance
++ meeting-fee contributions
+− AGM Party expenses</div>
+      <p style="margin-top:10px">A slice of the totals above, not an extra pot.</p>
+    </div>
+  </div>
+
+  <div class="notice" style="margin-top:28px">
+    <h3>One number on screen is not quite the whole picture</h3>
+    <p>
+      Where the group has invested, the app pairs each investment with the bank
+      movement that funded it. Until that pairing is automatic, investments can
+      be counted twice in the headline total — a real overstatement, being fixed
+      at source before it can mislead anyone.
+    </p>
+  </div>
+</section>
+
+<!-- ============================ PROOF ============================ -->
+<section class="view" id="v-proof" role="tabpanel" aria-labelledby="t-proof">
+  <p class="eyebrow">Work completed</p>
+  <h2>What we hardened before handing it over</h2>
+  <p class="sec-intro">
+    Money apps fail quietly. The interesting work was not adding screens — it was
+    finding the places where a member could change a number they shouldn't, and
+    closing each one.
+  </p>
+
+  <ul class="proof">
+    <li>
+      <span class="mk">✦</span>
+      <span>
+        <span class="t">Your PIN never reaches your phone</span>
+        <span class="d">
+          Sign-in is verified on the server against a one-way hash. No member can
+          read, copy or crack another member's PIN, because no PIN is ever sent
+          to a browser.
+        </span>
+      </span>
+    </li>
+    <li>
+      <span class="mk">✦</span>
+      <span>
+        <span class="t">One member can no longer vote twice</span>
+        <span class="d">
+          Voting used to rely on a list that treated two near-identical entries as
+          two people. Voting now happens inside a single transaction, so the
+          check that decides is the check that commits. This was the defect that
+          could have carried an exit request on one member's vote alone.
+        </span>
+      </span>
+    </li>
+    <li>
+      <span class="mk">✦</span>
+      <span>
+        <span class="t">The two-signature rule actually works</span>
+        <span class="d">
+          It was inert. A withdrawal moved the bank balance the moment it was
+          typed in, before anyone approved it. It now stays pending until a
+          second officer signs — and the person who recorded it cannot sign their
+          own.
+        </span>
+      </span>
+    </li>
+    <li>
+      <span class="mk">✦</span>
+      <span>
+        <span class="t">Only an admin can close a membership</span>
+        <span class="d">
+          Any signed-in member could previously mark anyone inactive, which
+          quietly shrinks the pool every later exit vote is counted against.
+          That decision is server-side now, and admin-only.
+        </span>
+      </span>
+    </li>
+    <li>
+      <span class="mk">✦</span>
+      <span>
+        <span class="t">Your name on a post is the server's to state</span>
+        <span class="d">
+          Forum replies and withdrawal records took their author from whatever
+          the browser said. Identity is now read from your member record.
+        </span>
+      </span>
+    </li>
+    <li>
+      <span class="mk">✦</span>
+      <span>
+        <span class="t">Changing your PIN ends your other sessions</span>
+        <span class="d">
+          Sessions are revocable server-side. Change your PIN and every other
+          device is logged out — the standard behaviour when a credential is
+          replaced.
+        </span>
+      </span>
+    </li>
+    <li>
+      <span class="mk">✦</span>
+      <span>
+        <span class="t">Nobody can sign in as you with the old default PIN</span>
+        <span class="d">
+          Seats arrived carrying a placeholder phone and a default PIN, both
+          guessable. Until a member claims their seat those were live
+          credentials. Claiming replaces them and removes the old hash — which
+          is why the admin screen now flags anyone still unclaimed.
+        </span>
+      </span>
+    </li>
+  </ul>
+
+  <div class="grid g3" style="margin-top:28px">
+    <div class="card">
+      <h3 style="font-family:var(--mono);font-size:1.6rem;color:var(--ink)">116</h3>
+      <p>automated tests over the money arithmetic and the claim rules</p>
+    </div>
+    <div class="card">
+      <h3 style="font-family:var(--mono);font-size:1.6rem;color:var(--ink)">34</h3>
+      <p>end-to-end checks that the server refuses what it should</p>
+    </div>
+    <div class="card">
+      <h3 style="font-family:var(--mono);font-size:1.6rem;color:var(--ink)">27</h3>
+      <p>onboarding checks: replayed tokens, double claims, privilege</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ NEXT ============================ -->
+<section class="view" id="v-next" role="tabpanel" aria-labelledby="t-next">
+  <p class="eyebrow">Roadmap</p>
+  <h2>Where this goes</h2>
+  <p class="sec-intro">
+    The order is deliberate and it is a hard dependency, not a preference.
+    Everything below rests on the books being right, so the books come first.
+  </p>
+
+  <div class="gate done">
+    <div class="gate-head">
+      <span class="gate-tag">Gate 1 · done</span>
+      <h3>The data is safe</h3>
+    </div>
+    <p>Every record is snapshotted and the restore is rehearsed, not assumed.</p>
+    <ul>
+      <li><span class="tick">✓</span> Snapshots taken before every risky change</li>
+      <li><span class="tick">✓</span> Backup script verified end to end</li>
+      <li><span class="todo">→</span> Treasurer backfills the missing 2026 months against the till</li>
+    </ul>
+  </div>
+
+  <div class="gate now">
+    <div class="gate-head">
+      <span class="gate-tag">Gate 2 · in progress</span>
+      <h3>Identity and authority are real</h3>
+    </div>
+    <p>The security pass. Most of it has now landed.</p>
+    <ul>
+      <li><span class="tick">✓</span> PIN hashes moved out of documents members can read</li>
+      <li><span class="tick">✓</span> Server-side sign-in with revocable sessions</li>
+      <li><span class="tick">✓</span> Money and identity writes moved behind the server</li>
+      <li><span class="tick">✓</span> Self-service onboarding</li>
+      <li><span class="todo">→</span> Firestore rules deployed and enforced in CI</li>
+      <li><span class="todo">→</span> Dues and fines raised by a server job, not by whoever opens the app</li>
+      <li><span class="todo">→</span> A written route to challenge a fine — see the next tab</li>
+    </ul>
+  </div>
+
+  <div class="gate">
+    <div class="gate-head">
+      <span class="gate-tag">Gate 3 · next</span>
+      <h3>The books are derived, not recomputed</h3>
+    </div>
+    <p>
+      Replace today's arithmetic with a real double-entry ledger: a chart of
+      accounts, a posting engine that only accepts balanced entries, and screens
+      that read from it. The migration has to reconcile to zero before it ships.
+    </p>
+    <ul>
+      <li>Corrections by reversal only — a mistake is undone, never erased</li>
+      <li>Balances rebuild from the journal, so the two can never disagree</li>
+      <li>A member's position reconstructs from the ledger alone</li>
+      <li>Withholding tax computed the first time, on distributions</li>
+    </ul>
+  </div>
+
+  <p class="eyebrow" style="margin-top:34px">After the books</p>
+  <h2>What the platform becomes</h2>
+  <p class="sec-intro">
+    Four products the group could run on the same engine, and a second
+    cooperative as the second tenant. The engine is designed generically from
+    the start, so adding these is enabling, not rebuilding.
+  </p>
+
+  <div class="grid g2" style="margin-bottom:20px">
+    <div class="inst">
+      <div class="kind">Instrument</div>
+      <h3>Term deposit</h3>
+      <p>The reference implementation. Fixed term, known return, matures on a date.</p>
+    </div>
+    <div class="inst">
+      <div class="kind">Instrument</div>
+      <h3>Group project</h3>
+      <p>Members pool into something with a cost and a completion — a building, a solar install.</p>
+    </div>
+    <div class="inst">
+      <div class="kind">Instrument</div>
+      <h3>Shares</h3>
+      <p>Permanent equity with a one-fifth holding cap and a register. A registered by-law amendment, not a relabelling.</p>
+    </div>
+    <div class="inst">
+      <div class="kind">Instrument</div>
+      <h3>Bonds</h3>
+      <p>Issued to members, accruing to whoever held them on the coupon date.</p>
+    </div>
+  </div>
+
+  <div class="grid g3">
+    <div class="card">
+      <h3>Other cooperatives</h3>
+      <p>Each group gets its own constitution, officers, members and books. This group is the first tenant and the reference implementation.</p>
+    </div>
+    <div class="card">
+      <h3>Collect, never hold</h3>
+      <p>Each group gets its own paybill and its money settles to its own account. The platform is never the account holder — which is also what keeps the regulatory path simple.</p>
+    </div>
+    <div class="card">
+      <h3>Market data</h3>
+      <p>Central Bank yields feed straight into what a T-bill is worth to the group. Foreign exchange stays a typed-in figure — no source worth trusting yet.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ LAW ============================ -->
+<section class="view" id="v-law" role="tabpanel" aria-labelledby="t-law">
+  <p class="eyebrow">Constraints, not preferences</p>
+  <h2>The rules this app holds to</h2>
+  <p class="sec-intro">
+    A co-operative is not a startup with a constitution attached. Some of these
+    are settled law, and the app is built around them rather than against them.
+  </p>
+
+  <div class="grid g2">
+    <div class="card">
+      <h3>Contributions, never shares</h3>
+      <p>
+        A contribution is a deposit — money the Act expects to be repaid. A share
+        is permanent equity, capped at a fifth per member, requiring a register
+        and attracting a dividend. They are different instruments under the Act,
+        and this app pays refunds on exit, which is exactly what makes them
+        deposits. Calling them shares would misdescribe them to members, to an
+        auditor and to the tax office.
+      </p>
+    </div>
+    <div class="card">
+      <h3>One member, one vote</h3>
+      <p>
+        Irrespective of what anyone has contributed. The exit threshold counts
+        active members as people, never as shillings — and a member cannot vote
+        on their own exit.
+      </p>
+    </div>
+    <div class="card">
+      <h3>Nothing is deleted</h3>
+      <p>
+        The database refuses deletion outright. A mistake is corrected by adding
+        a correcting entry, so the history a member can inspect stays whole.
+      </p>
+    </div>
+    <div class="card">
+      <h3>Kenyan numbers only</h3>
+      <p>
+        +254 phone numbers normalised on the way in, shillings with no currency
+        conversion anywhere, and a financial year that runs July to June.
+      </p>
+    </div>
+  </div>
+
+  <div class="notice" style="margin-top:22px">
+    <h3>Where we are not compliant yet</h3>
+    <p>
+      Fines are currently raised automatically when a contribution is late.
+      Under the Data Protection Act that is an automated decision with legal
+      effect, and members are entitled to written notice of it, an explanation
+      in plain language, and a route to have a person reconsider it. The
+      Co-operative Societies Act separately requires notice and an opportunity to
+      show cause before a fine is imposed.
+    </p>
+    <p>
+      <strong>Today we do none of that, and it is live.</strong> The fix is
+      written and it is small — a notice naming the rule and the amount, a
+      plain-language explanation, and a named officer who answers challenges in
+      writing. It sits in the current gate, not a later one, because it is the
+      thing a regulator would look at first.
+    </p>
+  </div>
+
+  <p class="foot">
+    <span>Built for the Young &amp; Ambitious group</span>
+    <span>·</span>
+    <a href="https://ambitious.emen.africa" target="_blank" rel="noopener">ambitious.emen.africa</a>
+  </p>
+</section>
+</main>
+
+</div>
+
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('button.tab'));
+  var views = Array.prototype.slice.call(document.querySelectorAll('.view'));
+  var ORDER = ['today', 'proof', 'next', 'law'];
+
+  function show(name) {
+    if (ORDER.indexOf(name) === -1) name = 'today';
+    views.forEach(function (v) { v.classList.toggle('on', v.id === 'v-' + name); });
+    tabs.forEach(function (t) {
+      t.setAttribute('aria-selected', String(t.id === 't-' + name));
+    });
+    if (location.hash.slice(1) !== name) {
+      history.replaceState(null, '', '#' + name);
+    }
+    window.scrollTo(0, 0);
+  }
+
+  tabs.forEach(function (t) {
+    t.addEventListener('click', function () { show(t.id.slice(2)); });
+  });
+
+  window.addEventListener('hashchange', function () { show(location.hash.slice(1)); });
+  show(location.hash.slice(1));
+
+  // Theme toggle. Reads and writes are wrapped because a private window or a
+  // cleared-site-data viewer can make localStorage throw, and the page has to
+  // work anyway.
+  var btn = document.getElementById('theme');
+  var saved = null;
+  try { saved = localStorage.getItem('ya-theme'); } catch (e) { /* ignore */ }
+  if (saved === 'dark' || saved === 'light') document.documentElement.dataset.theme = saved;
+
+  btn.addEventListener('click', function () {
+    var now = document.documentElement.dataset.theme;
+    var next;
+    if (!now) {
+      next = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'light' : 'dark';
+    } else {
+      next = now === 'dark' ? 'light' : 'dark';
+    }
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('ya-theme', next); } catch (e) { /* ignore */ }
+  });
+})();
+</script>
