@@ -31,6 +31,12 @@ interface AuthContextType {
   logout: () => void;
   changePin: (oldPin: string, newPin: string) => Promise<{ success: boolean; error?: string }>;
   updateProfile: (data: { name: string }) => Promise<{ success: boolean; error?: string }>;
+  /**
+   * Re-read the session from the server. Needed after a flow that authenticates
+   * out-of-band — onboarding completes server-side and sets the cookie, so the
+   * context has to be told rather than left holding the pre-signin state.
+   */
+  refresh: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -117,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, changePin, updateProfile }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, changePin, updateProfile, refresh: loadSession }}>
       {children}
     </AuthContext.Provider>
   );

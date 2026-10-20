@@ -11,6 +11,7 @@
     "emulators": "firebase emulators:start --import=./emulator-data --export-on-exit=./emulator-data",
     "emulators:seed": "NEXT_PUBLIC_USE_EMULATORS=true node scripts/seed-emulator.mjs",
     "verify:auth": "NEXT_PUBLIC_USE_EMULATORS=true node scripts/verify-auth.mjs",
+    "verify:onboarding": "NEXT_PUBLIC_USE_EMULATORS=true node scripts/verify-onboarding.mjs",
     "migrate:secrets": "node scripts/migrate-secrets.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

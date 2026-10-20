@@ -78,6 +78,12 @@ export interface Member {
   joinedAt: string; // YYYY-MM-DD
   createdAt: number;
   updatedAt: number;
+  /**
+   * When this member completed self-service onboarding. Absent means the seat is
+   * still carrying the placeholder phone the seeder minted, so it has never been
+   * claimed. The admin screen uses this to show setup progress.
+   */
+  claimedAt?: number;
 }
 
 /** Hydrate a Firestore member doc with computed fields */

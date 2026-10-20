@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { useSettings } from '@/lib/hooks';
 import { Button } from '@/components/ui/button';
@@ -77,7 +78,10 @@ export function LoginPage() {
         </form>
 
         <p className="text-center text-xs text-gold-200/50 mt-6">
-          Contact your admin to get registered
+          First time here?{' '}
+          <Link href="/join" className="font-semibold text-gold-200 hover:text-gold-100 underline underline-offset-2">
+            Set up your account
+          </Link>
         </p>
       </div>
     </div>

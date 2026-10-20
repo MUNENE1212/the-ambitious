@@ -34,6 +34,7 @@ export function publicMember(id: string, data: Record<string, unknown>) {
     createdAt: data.createdAt as number,
     updatedAt: data.updatedAt as number,
     mustChangePin: (data.mustChangePin as boolean) ?? false,
+    claimedAt: data.claimedAt as number | undefined,
   };
 }
 
