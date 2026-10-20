@@ -12,7 +12,9 @@
  *      this whole flow exists to close;
  *   5. an onboarded member can actually sign in with what they just chose;
  *   6. weak PINs (0000, 1234) are refused, because 0000 is what seed-members
- *      hands out and 1234 is the first thing anyone tries.
+ *      hands out and 1234 is the first thing anyone tries;
+ *   7. an admin PIN reset deletes the hash from members/ as well — the other
+ *      route by which an exposure could outlive the credential it came from.
  *
  * Fixtures are written and removed through the admin SDK — the rules deny
  * `delete`, so a client-SDK teardown would silently fail and leave junk behind.
@@ -64,6 +66,9 @@ const FIXTURES = [
   // An admin-role placeholder that is active — claiming must not be able to
   // hand anyone a live admin account.
   { name: 'Karl Kimani', phone: '+254700000904', pin: '0000', active: true, role: 'admin' },
+  // A second admin who signs in for real, so the reset-pin checks below drive
+  // the actual endpoint through its actual auth guard rather than a stub.
+  { name: 'Mary Njeri', phone: '+254700000905', pin: '0000', active: true, role: 'admin' },
 ];
 
 const ids = {};
@@ -271,6 +276,45 @@ async function run() {
     wrongPin.status === 401,
     `HTTP ${wrongPin.status}`
   );
+
+  // --- admin reset path ---------------------------------------------------
+  // An admin resetting a PIN must clear the hash from the member document too,
+  // not just write a new one into secrets/. Writing only to secrets/ leaves the
+  // OLD hash readable to every member — the reset looks like it worked and
+  // nothing about the exposure changed. This is the same defect the onboarding
+  // claim had to fix for itself.
+  const resetId = ids['Ivy Muthoni'];
+  // Sign in as a real admin over HTTP rather than forging a session — the point
+  // is to prove the endpoint works through its own guard, and a cookie minted
+  // behind the guard's back would not test that.
+  const adminLogin = await post(LOGIN, { phone: '0700000905', pin: '0000' });
+  const adminCookie = (adminLogin.headers.get('set-cookie') ?? '').split(';')[0];
+  check('the admin fixture can sign in', adminCookie.length > 0, `HTTP ${adminLogin.status}`);
+  const reset = await post(
+    `${BASE}/api/admin/members/${resetId}`,
+    { action: 'reset-pin', pin: '8402' },
+    adminCookie
+  );
+  check('an admin can reset a PIN', reset.ok, `HTTP ${reset.status}`);
+  const afterReset = await admin.collection('members').doc(resetId).get();
+  check(
+    'resetting a PIN DELETES the hash from members/, not just secrets/',
+    afterReset.data()?.pinHash === undefined,
+    afterReset.data()?.pinHash ? 'still readable by every member' : 'gone'
+  );
+  const resetSecret = (await admin.collection('secrets').doc(resetId).get()).data();
+  check(
+    'the new hash is written to secrets/ where the rules deny it',
+    typeof resetSecret?.pinHash === 'string' && resetSecret.pinHash.startsWith('$2')
+  );
+  const resetLogin = await post(LOGIN, { phone: '0712399988', pin: '8402' });
+  check(
+    'the member signs in with the PIN the admin set',
+    resetLogin.ok,
+    `HTTP ${resetLogin.status}`
+  );
+  const oldPin = await post(LOGIN, { phone: '0712399988', pin: '0000' });
+  check('the pre-reset PIN no longer works', oldPin.status === 401, `HTTP ${oldPin.status}`);
 
   // --- privilege ----------------------------------------------------------
   // Two directions, because they fail differently. The security-relevant one is

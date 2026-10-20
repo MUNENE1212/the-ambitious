@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
+import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '@/lib/server/admin';
 import { requireAdmin } from '@/lib/server/guard';
 import { normalizePhone } from '@/lib/server/members';
@@ -95,9 +96,23 @@ export async function POST(request: Request, { params }: Params) {
       }
       const pinHash = await bcrypt.hash(pin, 10);
       await secretRef.set({ pinHash, failedAttempts: 0, lockedUntil: null, migratedAt: now }, { merge: true });
-      // secrets/ only — the member doc is client-readable, so mirroring the
-      // hash there would undo the point of the split.
-      await memberRef.set({ mustChangePin: true, updatedAt: now }, { merge: true });
+      // secrets/ only — mirroring the hash onto the member doc would undo the
+      // point of the split. But an UNMIGRATED member still carries the hash
+      // that was there before, and leaving it is the whole vulnerability: the
+      // old PIN stays readable to any signed-in member until the migration
+      // script eventually runs, which may be never. Clearing it here is what
+      // makes "reset this PIN" mean the old one is gone. The onboarding claim
+      // path does exactly the same thing.
+      await memberRef.set(
+        {
+          mustChangePin: true,
+          pinHash: FieldValue.delete(),
+          failedAttempts: FieldValue.delete(),
+          lockedUntil: FieldValue.delete(),
+          updatedAt: now,
+        },
+        { merge: true }
+      );
       // Anyone who knew the old PIN must lose their session.
       await revokeAllSessions(id);
       return NextResponse.json({ success: true });

@@ -216,13 +216,12 @@ export function AdminContent() {
 
   const activeCount = members.filter(m => m.active).length;
 
-  // Members still carrying the placeholder phone have never been claimed —
-  // either they have not opened the site yet, or setup failed for them. Until
-  // the last one is claimed, every one of them can still be signed into by
-  // anyone who guesses the placeholder PIN, so this is worth surfacing loudly
-  // rather than leaving buried in the member list.
-  const pendingSetup = members.filter(m => m.active && !m.claimedAt);
-  const claimedCount = members.filter(m => m.active && m.claimedAt).length;
+  // A member needs setup while their PIN hash is still in the document every
+  // member can read — until then anyone can sign in as them. Note this is NOT
+  // the same as "hasn't claimed a seat": the admin's own account and any seat
+  // set up by hand are included until their hash is cleared.
+  const pendingSetup = members.filter(m => m.active && m.needsSetup);
+  const setUpCount = members.filter(m => m.active && !m.needsSetup).length;
 
   return (
     <div className="p-4 space-y-4">
@@ -243,11 +242,10 @@ export function AdminContent() {
                 {pendingSetup.length} member{pendingSetup.length === 1 ? '' : 's'} not set up yet
               </p>
               <p className="text-xs text-stone-600 mt-1">
-                Until {pendingSetup.length === 1 ? 'this member claims' : 'these members claim'} their
-                seat, the placeholder phone and PIN still work — anyone could sign in as{' '}
-                {pendingSetup.length === 1 ? 'them' : 'them'}. Ask{' '}
-                {pendingSetup.length === 1 ? 'them' : 'them'} to open the app and choose{' '}
-                <strong>Set up your account</strong> on the sign-in screen.
+                While a member&apos;s PIN hash sits in a record every member can read, anyone
+                could sign in as them. Ask them to open the app and choose{' '}
+                <strong>Set up your account</strong> on the sign-in screen — or reset their
+                PIN from here, which clears it just as well.
               </p>
               <ul className="mt-2 flex flex-wrap gap-1.5">
                 {pendingSetup.map(m => (
@@ -261,11 +259,12 @@ export function AdminContent() {
         </Card>
       )}
 
-      {pendingSetup.length === 0 && claimedCount > 0 && (
+      {pendingSetup.length === 0 && setUpCount > 0 && (
         <Card className="border-emerald-200 bg-emerald-50/60">
           <p className="text-sm text-stone-700">
             <span aria-hidden className="mr-1">✓</span>
-            All {claimedCount} active members have set up their own account.
+            All {setUpCount} active members have their PIN hash stored where other members
+            cannot read it.
           </p>
         </Card>
       )}
@@ -284,7 +283,7 @@ export function AdminContent() {
                   <p className="font-medium text-stone-800">{m.name}</p>
                   <Badge variant={m.active ? 'success' : 'danger'}>{m.active ? 'Active' : 'Inactive'}</Badge>
                   <Badge variant={m.role === 'admin' ? 'warning' : m.role === 'manager' ? 'info' : 'default'}>{m.role}</Badge>
-                  {!m.claimedAt && m.active && <Badge variant="warning">Not set up</Badge>}
+                  {m.needsSetup && m.active && <Badge variant="warning">Not set up</Badge>}
                   {m.secondary && <Badge variant="default">Secondary</Badge>}
                   {(m.titles ?? []).map(t => <Badge key={t} variant="gold">{TITLE_LABELS[t]}</Badge>)}
                 </div>

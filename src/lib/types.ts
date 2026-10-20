@@ -79,11 +79,18 @@ export interface Member {
   createdAt: number;
   updatedAt: number;
   /**
-   * When this member completed self-service onboarding. Absent means the seat is
-   * still carrying the placeholder phone the seeder minted, so it has never been
-   * claimed. The admin screen uses this to show setup progress.
+   * When this member completed self-service onboarding. Set by the claim flow;
+   * absent for anyone whose seat was set up by hand through the admin screen.
+   * Display only — `needsSetup` is the signal to act on, because a seat can be
+   * secure without ever having been claimed.
    */
   claimedAt?: number;
+  /**
+   * True while this member's PIN hash is still in the client-readable member
+   * document, i.e. any signed-in member can read it. Cleared by an onboarding
+   * claim, by an admin PIN reset, or by the secrets migration.
+   */
+  needsSetup?: boolean;
 }
 
 /** Hydrate a Firestore member doc with computed fields */
@@ -96,6 +103,22 @@ export function hydrateMember(id: string, data: Record<string, unknown>): Member
     secondary: (data.secondary as boolean) ?? false,
     lockedUntil,
     isLocked: lockedUntil !== null && lockedUntil > Date.now(),
+    // The one question the admin screen actually needs answered: is this
+    // member's PIN hash still sitting in a document every member can read?
+    //
+    // Deliberately NOT derived from `claimedAt`. A member whose seat the admin
+    // set up by hand has never "claimed" anything, and an onboarding claim is
+    // only one of the two ways a seat becomes secure — so a claimedAt badge
+    // reports the admin's own correctly-configured account as not set up, and
+    // clears itself for a member who reset their PIN through the admin screen.
+    // The presence of the hash is the thing that matters; how it got there does
+    // not.
+    //
+    // This does mean the hash has already crossed the wire to reach here — the
+    // admin screen's realtime listener pulls the whole collection. Deriving a
+    // boolean from data we already hold costs nothing, but the underlying read
+    // is the thing `scripts/migrate-secrets.mjs` exists to end.
+    needsSetup: typeof data.pinHash === 'string' && data.pinHash.length > 0,
   } as Member;
 }
 
