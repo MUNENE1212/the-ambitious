@@ -31,6 +31,9 @@ export interface FinancialSummary {
 
   unseenExpensesCount: number;
   unseenWithdrawalsCount: number;
+
+  /** Withdrawals recorded but not yet carrying two signatories. */
+  pendingWithdrawalCount: number;
 }
 
 export function calculateFinancials(inputs: FinancialInputs): FinancialSummary {
@@ -52,7 +55,13 @@ export function calculateFinancials(inputs: FinancialInputs): FinancialSummary {
   const mpesaExpenses = activeExpenses.filter(e => e.paymentMethod === 'Mpesa').reduce((s, e) => s + e.amount, 0);
 
   const totalDeposits = bankTransactions.filter(t => t.type === 'deposit').reduce((s, t) => s + t.amount, 0);
-  const totalWithdrawals = bankTransactions.filter(t => t.type === 'withdrawal').reduce((s, t) => s + t.amount, 0);
+  // Only *approved* withdrawals have left the bank. A withdrawal awaiting its
+  // second signatory has been recorded but the money has not moved, so counting
+  // it would understate the balance and — worse — let a pending record shrink
+  // cash on hand before anyone authorised it.
+  const totalWithdrawals = bankTransactions
+    .filter(t => t.type === 'withdrawal' && t.status === 'approved')
+    .reduce((s, t) => s + t.amount, 0);
 
   const cashOnHand = settings.openingCashBalance
     + totalWithdrawals   // bank-to-cash
@@ -117,7 +126,12 @@ export function calculateFinancials(inputs: FinancialInputs): FinancialSummary {
     totalDeposits,
     totalWithdrawals,
     unseenExpensesCount: activeExpenses.filter(e => e.seenBy.length === 0).length,
-    unseenWithdrawalsCount: bankTransactions.filter(t => t.type === 'withdrawal' && t.seenBy.length === 0).length,
+    unseenWithdrawalsCount: bankTransactions
+      .filter(t => t.type === 'withdrawal' && t.seenBy.length === 0)
+      .length,
+    pendingWithdrawalCount: bankTransactions
+      .filter(t => t.type === 'withdrawal' && t.status !== 'approved')
+      .length,
   };
 }
 

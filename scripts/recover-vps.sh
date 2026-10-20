@@ -13,8 +13,11 @@ APP_NAME=the-ambitious
 PORT=3005
 HEALTH_URL="http://127.0.0.1:${PORT}/"
 
-echo "=== Stopping PM2 ==="
-pm2 delete "$APP_NAME" 2>/dev/null || pm2 kill 2>/dev/null || true
+echo "=== Stopping PM2 (our app only) ==="
+# NEVER `pm2 kill`. It kills the whole daemon and all seven other production
+# services on this shared box. The `|| pm2 kill` fallback that used to be here
+# was the single most dangerous line in the repo.
+pm2 delete "$APP_NAME" 2>/dev/null || true
 
 echo ""
 echo "=== Cleaning broken atomic-deploy state ==="
@@ -39,6 +42,7 @@ module.exports = {
   apps: [
     {
       name: 'the-ambitious',
+      interpreter: '/opt/node24/bin/node',
       script: '.next/standalone/server.js',
       cwd: '/opt/the-ambitious',
       env: {

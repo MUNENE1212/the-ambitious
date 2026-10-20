@@ -1,10 +1,20 @@
 name: Deploy
 
+# AUTO-DEPLOY IS OFF, DELIBERATELY.
+#
+# This used to fire on every successful CI run on `main`, with the `production`
+# environment carrying zero protection rules — so `git push` deployed straight to
+# the box. The health check only fetched `/`, which renders fine without
+# credentials, so a deploy where every member login returns 503 reported GREEN.
+#
+# Re-enable by uncommenting the workflow_run block below, and only after
+# phases 0-4 of docs/DEPLOYMENT-PLAN.md have run clean at least twice.
+#
+# workflow_run:
+#   workflows: [CI]
+#   types: [completed]
+#   branches: [main]
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       ref:
@@ -34,6 +44,16 @@ jobs:
       NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
       NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
       NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
+      # Server-only. These are what let /api/* reach Firestore through the Admin
+      # SDK. Without them the app boots and every login returns 503 — which is
+      # why the health check below probes auth and not just `/`.
+      FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+      FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+      # NOT FIREBASE_PRIVATE_KEY. It holds literal newlines and appleboy/ssh-action
+      # is known to mangle multi-line values passed through `envs`. A truncated
+      # key fails exactly like a missing one — isAdminConfigured() returns false
+      # and login 503s — but only AFTER a deploy reported success. It goes to a
+      # root-owned file on the VPS instead, via the step below.
     steps:
       - name: Resolve target SHA
         id: sha
@@ -149,6 +169,43 @@ jobs:
             tar -xzf deploy.tar.gz scripts/deploy-remote.sh
             mv scripts/deploy-remote.sh deploy-remote.sh
             chmod +x deploy-remote.sh
+
+      - name: Write server secrets to a root-owned env file
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          command_timeout: 2m
+          # The key is stored base64-encoded in the FIREBASE_PRIVATE_KEY secret.
+          # A PEM key spans many lines; passing that through `envs` is exactly
+          # how appleboy/ssh-action truncates it, and a truncated key fails
+          # identically to a missing one (login 503s) but only after the deploy
+          # reported success. Base64 makes it one line, so there is nothing to
+          # mangle and nothing for the shell to misparse.
+          #
+          # `umask 077` is set BEFORE the redirect creates the file, so the key
+          # is never briefly world-readable.
+          script: |
+            set -euo pipefail
+            umask 077
+            ENV_PATH=/opt/the-ambitious/.env.production
+            mkdir -p /opt/the-ambitious
+            {
+              printf 'FIREBASE_PROJECT_ID=%s\n' '${{ secrets.FIREBASE_PROJECT_ID }}'
+              printf 'FIREBASE_CLIENT_EMAIL=%s\n' '${{ secrets.FIREBASE_CLIENT_EMAIL }}'
+              printf 'FIREBASE_PRIVATE_KEY_B64=%s\n' '${{ secrets.FIREBASE_PRIVATE_KEY_B64 }}'
+            } > "$ENV_PATH"
+            chmod 600 "$ENV_PATH"
+            echo "wrote $ENV_PATH ($(wc -l < "$ENV_PATH") lines, mode $(stat -c %a "$ENV_PATH"))"
+
+            # Fail loudly here rather than deploying a 503 app. An empty or
+            # undecodable key is caught now, not by a member's login attempt.
+            if ! printf '%s' '${{ secrets.FIREBASE_PRIVATE_KEY_B64 }}' | base64 -d 2>/dev/null | grep -q 'BEGIN PRIVATE KEY'; then
+              echo "::error::FIREBASE_PRIVATE_KEY_B64 is empty or is not a base64-encoded PEM key."
+              echo "::error::Generate it with: base64 -w0 service-account.json-key.pem"
+              exit 1
+            fi
 
       - name: Atomic deploy + health check
         id: deploy

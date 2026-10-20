@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, addDoc, doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Expense, PaymentMethod, SeenBy, hydrateExpense } from '@/lib/types';
 import { PAYMENT_METHODS, DEFAULT_EXPENSE_CATEGORIES } from '@/lib/constants';
@@ -91,8 +91,16 @@ export function ExpensesTab() {
     if (!user) return;
     if (expense.seenBy.some(s => s.memberId === user.id)) return;
     try {
-      const entry = { memberId: user.id, memberName: user.name, seenAt: getTimestamp() };
-      await updateDoc(doc(db, 'expenses', expense.id), { seenBy: arrayUnion(entry) });
+      // Server-side, so a member with two tabs open is recorded once. The
+      // client-side arrayUnion deduped on whole-object equality, and seenAt
+      // differs every time, so both entries survived.
+      const res = await fetch('/api/seen', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ collection: 'expenses', id: expense.id }),
+      });
+      if (!res.ok) showToast('Failed to mark as seen', 'error');
     } catch {
       showToast('Failed to mark as seen', 'error');
     }

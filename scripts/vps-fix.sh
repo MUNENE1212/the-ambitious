@@ -28,9 +28,12 @@ echo "-- port $PORT listening? --"
 ss -tlnp 2>/dev/null | grep ":$PORT" || echo "  NOT listening"
 echo ""
 
-echo "=== 2. Stop PM2 instance for our app only ==="
+echo "=== 2. Stop PM2 instance for our app ONLY ==="
+# NEVER `pm2 kill` here. It kills the whole PM2 daemon and every app in it —
+# seven other production services share this box (iphone-onlineduka,
+# baitech-backend, platform-hub, ementech-backend-staging, kuku-egg-tracker,
+# dumuwaks-backend, ementech-backend). Deleting by name is the only safe form.
 pm2 delete "$APP_NAME" 2>/dev/null
-pm2 kill 2>/dev/null
 sleep 1
 
 echo ""
@@ -63,6 +66,7 @@ module.exports = {
   apps: [
     {
       name: '$APP_NAME',
+      interpreter: '/opt/node24/bin/node',
       script: '.next/standalone/server.js',
       cwd: '$APP_DIR',
       exec_mode: 'fork',

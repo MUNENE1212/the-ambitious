@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, addDoc, doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { ForumPost, ForumReply, ForumCategory, hydrateForumPost } from '@/lib/types';
+import { ForumPost, ForumCategory, hydrateForumPost } from '@/lib/types';
 import { FORUM_CATEGORIES } from '@/lib/constants';
 import { useAuth } from '@/lib/auth-context';
 import { canPostAnnouncement } from '@/lib/roles';
@@ -110,17 +110,23 @@ export function ForumContent() {
     if (!user || !selectedPost || !reply.trim()) return;
     setSaving(true);
     try {
-      const newReply: ForumReply = {
-        id: uuidv4(),
-        body: reply.trim(),
-        authorId: user.id,
-        authorName: user.name,
-        authorTitles: user.titles ?? [],
-        createdAt: Date.now(),
-      };
-      await updateDoc(doc(db, 'forumPosts', selectedPost.id), { replies: arrayUnion(newReply) });
+      // Server-side, so the author identity comes from the member document
+      // rather than from whatever this browser claims it is. The id is
+      // generated once and reused on retry, so a double-submit is one reply.
+      const replyId = uuidv4();
+      const res = await fetch(`/api/forum-posts/${selectedPost.id}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ body: reply.trim(), replyId }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        showToast(data.error || 'Failed to reply', 'error');
+        return;
+      }
       setReply('');
-      setSelectedPost(prev => prev ? { ...prev, replies: [...(prev.replies || []), newReply] } : null);
+      // onSnapshot pushes the authoritative reply list — no local patching.
       showToast('Reply posted');
     } catch {
       showToast('Failed to reply', 'error');

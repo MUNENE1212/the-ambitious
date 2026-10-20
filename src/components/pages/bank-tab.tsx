@@ -1,13 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, addDoc, doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { BankTransaction, ForumPost, SeenBy, hydrateBankTransaction } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
-import { canRecordFunds } from '@/lib/roles';
+import { canRecordFunds, canVote } from '@/lib/roles';
 import { formatKES } from '@/lib/financial';
-import { getTimestamp } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,6 +27,7 @@ export function BankTab() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const [type, setType] = useState<'deposit' | 'withdrawal'>('deposit');
   const [amount, setAmount] = useState('');
@@ -59,11 +59,15 @@ export function BankTab() {
     return () => unsubs.forEach(u => u());
   }, []);
 
-  // All transactions count toward balance (2-signatory approval suspended)
+  // Only approved withdrawals have moved money out of the bank. A pending one is
+  // recorded but not yet authorised, so it is shown but not subtracted.
   const totalDeposits = transactions.filter(t => t.type === 'deposit').reduce((s, t) => s + t.amount, 0);
-  const totalWithdrawals = transactions.filter(t => t.type === 'withdrawal').reduce((s, t) => s + t.amount, 0);
+  const totalWithdrawals = transactions
+    .filter(t => t.type === 'withdrawal' && t.status === 'approved')
+    .reduce((s, t) => s + t.amount, 0);
   const bankBalance = totalDeposits - totalWithdrawals;
   const unseenWithdrawalsCount = transactions.filter(t => t.type === 'withdrawal' && t.seenBy.length === 0).length;
+  const pendingWithdrawals = transactions.filter(t => t.type === 'withdrawal' && t.status !== 'approved');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,22 +85,24 @@ export function BankTab() {
 
     setSaving(true);
     try {
-      const seenBy: SeenBy[] = [{ memberId: user.id, memberName: user.name, seenAt: getTimestamp() }];
-      await addDoc(collection(db, 'bankTransactions'), {
-        type,
-        amount: amountNum,
-        date,
-        description: description.trim(),
-        proposalId: proposalId || null,
-        // Approval suspended — every transaction takes effect immediately
-        status: 'approved',
-        approvals: [],
-        seenBy,
-        recordedBy: user.id,
-        recordedByName: user.name,
-        createdAt: Date.now(),
+      // The server decides status and re-checks the balance against committed
+      // data — the snapshot above is only for the early client-side nudge.
+      const res = await fetch('/api/bank-transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ type, amount: amountNum, date, description: description.trim(), proposalId: proposalId || null }),
       });
-      showToast(type === 'deposit' ? 'Cash deposited to bank' : 'Withdrawal recorded');
+      const data = (await res.json().catch(() => ({}))) as { error?: string; status?: string };
+      if (!res.ok) {
+        showToast(data.error || 'Failed to save', 'error');
+        return;
+      }
+      showToast(
+        data.status === 'pending'
+          ? 'Withdrawal recorded — awaiting a second signatory'
+          : 'Cash deposited to bank'
+      );
       setShowForm(false);
       setAmount('');
       setDescription('');
@@ -108,12 +114,37 @@ export function BankTab() {
     setSaving(false);
   };
 
+  const handleApprove = async (tx: BankTransaction) => {
+    if (!user) return;
+    setBusyId(tx.id);
+    try {
+      const res = await fetch(`/api/bank-transactions/${tx.id}/approve`, {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; status?: string };
+      if (!res.ok) {
+        showToast(data.error || 'Failed to sign', 'error');
+        return;
+      }
+      showToast(data.status === 'approved' ? 'Withdrawal approved — funds released' : 'Signature recorded');
+    } catch {
+      showToast('Failed to sign', 'error');
+    }
+    setBusyId(null);
+  };
+
   const handleMarkSeen = async (tx: BankTransaction) => {
     if (!user) return;
     if (tx.seenBy.some(s => s.memberId === user.id)) return;
     try {
-      const entry = { memberId: user.id, memberName: user.name, seenAt: getTimestamp() };
-      await updateDoc(doc(db, 'bankTransactions', tx.id), { seenBy: arrayUnion(entry) });
+      const res = await fetch('/api/seen', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ collection: 'bankTransactions', id: tx.id }),
+      });
+      if (!res.ok) showToast('Failed to mark as seen', 'error');
     } catch {
       showToast('Failed to mark as seen', 'error');
     }
@@ -151,6 +182,51 @@ export function BankTab() {
         </p>
       )}
 
+      {/* Withdrawals recorded but not yet carrying two signatories. The
+          constitution requires two, so these do not move the balance until the
+          second signature lands. */}
+      {pendingWithdrawals.length > 0 && (
+        <Card>
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-stone-700">
+              {pendingWithdrawals.length} withdrawal{pendingWithdrawals.length === 1 ? '' : 's'} awaiting signatures
+            </p>
+            <Badge variant="warning">Not yet released</Badge>
+          </div>
+          <p className="text-xs text-stone-400 mt-1">
+            Two signatories are required before funds leave the bank.
+          </p>
+          <div className="space-y-2 mt-3">
+            {pendingWithdrawals.map(tx => {
+              const alreadySigned = tx.approvals.some(a => a.memberId === user?.id);
+              const isRecorder = tx.recordedBy === user?.id;
+              const canSign = !!user && canVote(user) && !alreadySigned && !isRecorder;
+              return (
+                <div key={tx.id} className="flex items-center justify-between gap-2 text-sm">
+                  <div>
+                    <p className="text-stone-700">{formatKES(tx.amount)}</p>
+                    <p className="text-xs text-stone-400">
+                      by {tx.recordedByName || 'a member'}
+                      {tx.approvals.length > 0 &&
+                        ` · signed by ${tx.approvals.map(a => a.memberName).join(', ')}`}
+                    </p>
+                  </div>
+                  {isRecorder ? (
+                    <span className="text-xs text-stone-400 italic">You recorded this</span>
+                  ) : alreadySigned ? (
+                    <span className="text-xs text-stone-400 italic">You signed this</span>
+                  ) : canSign ? (
+                    <Button size="sm" loading={busyId === tx.id} onClick={() => handleApprove(tx)}>
+                      Sign
+                    </Button>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
       {/* Transaction List */}
       {transactions.length === 0 ? (
         <EmptyState title="No bank transactions" description="Record deposits and withdrawals here" />
@@ -167,6 +243,9 @@ export function BankTab() {
                         <Badge variant={tx.type === 'deposit' ? 'success' : 'danger'}>
                           {tx.type === 'deposit' ? 'Cash to Bank' : 'Bank to Cash'}
                         </Badge>
+                        {tx.type === 'withdrawal' && tx.status !== 'approved' && (
+                          <Badge variant="warning">Awaiting signature</Badge>
+                        )}
                       </div>
                       {tx.description && <p className="text-sm text-stone-500 mt-1">{tx.description}</p>}
                       <p className="text-xs text-stone-400 mt-1">

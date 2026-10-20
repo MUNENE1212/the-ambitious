@@ -107,6 +107,46 @@ describe('calculateFinancials — worked state', () => {
   });
 });
 
+describe('calculateFinancials — withdrawal sign-off', () => {
+  // Regression: a withdrawal used to be written with `status: 'approved'` and
+  // nothing ever wrote `approvals`, so the constitutional two-signatory rule
+  // (PLAN.md Section C) was never applied and the balance moved on write.
+
+  const withDrawals = (txs: ReturnType<typeof makeBankTx>[]) => ({
+    contributions: [makeContribution({ purpose: 'monthly', status: 'Paid', amount: 10_000 })],
+    expenses: [] as ReturnType<typeof makeExpense>[],
+    bankTransactions: txs,
+    investments: [] as ReturnType<typeof makeInvestment>[],
+    settings: makeSettings({ openingBankBalance: 0, openingCashBalance: 0 }),
+  });
+
+  it('counts an approved withdrawal as having left the bank', () => {
+    const fin = calculateFinancials(withDrawals([
+      makeBankTx({ type: 'withdrawal', amount: 3_000, status: 'approved' }),
+    ]));
+    expect(fin.totalWithdrawals).toBe(3_000);
+  });
+
+  it('does NOT count a pending withdrawal — the money has not moved', () => {
+    const fin = calculateFinancials(withDrawals([
+      makeBankTx({ type: 'withdrawal', amount: 3_000, status: 'pending' }),
+    ]));
+    expect(fin.totalWithdrawals).toBe(0);
+    // And the balance must not be shrunk by an unauthorised withdrawal.
+    expect(fin.bankBalance).toBe(10_000);
+  });
+
+  it('reports pending withdrawals so the UI can prompt for signatures', () => {
+    const fin = calculateFinancials(withDrawals([
+      makeBankTx({ type: 'withdrawal', amount: 3_000, status: 'pending' }),
+      makeBankTx({ type: 'withdrawal', amount: 1_000, status: 'approved' }),
+      makeBankTx({ type: 'deposit', amount: 500 }),
+    ]));
+    expect(fin.pendingWithdrawalCount).toBe(1);
+    expect(fin.totalWithdrawals).toBe(1_000);
+  });
+});
+
 describe('calculateFinancials — fine settlement', () => {
   it('does not count a fine as money in the bank until it is actually settled', () => {
     // Dues paid, fine left behind: 600 in, the 200 fine excluded.

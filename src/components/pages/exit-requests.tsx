@@ -1,14 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { ExitRequest, Member, Vote, hydrateMember } from '@/lib/types';
+import { ExitRequest, Member, hydrateMember } from '@/lib/types';
 import { useAuth } from '@/lib/auth-context';
-import { canVote, canRecordFunds, isSavingsGroupMember } from '@/lib/roles';
-import { getVoteSummary, checkVoteOutcome, canMemberVote } from '@/lib/verification';
+import { canVote, isAdmin, isSavingsGroupMember } from '@/lib/roles';
+import { getVoteSummary, canMemberVote } from '@/lib/verification';
 import { formatKES } from '@/lib/financial';
-import { getTimestamp } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -48,31 +47,66 @@ export function ExitRequestsContent() {
 
   const activeMemberCount = members.filter(m => m.active && isSavingsGroupMember(m)).length;
 
+  /**
+   * Record a vote.
+   *
+   * This goes through /api rather than writing to Firestore from the browser.
+   * The old client write decided the request's new status from the snapshot this
+   * page already held, so two members voting at once could both fail to flip the
+   * status; and `arrayUnion` dedupes on whole-object equality, so a member voting
+   * twice in two tabs got two votes because `votedAt` differed. Both now happen
+   * inside one server transaction that re-reads the committed vote list.
+   */
   const castVote = async (req: ExitRequest, vote: 'approve' | 'reject') => {
     if (!user) return;
     setBusyId(req.id);
     try {
-      const newVote: Vote = { memberId: user.id, memberName: user.name, vote, votedAt: getTimestamp() };
-      const votes = [...req.votes, newVote];
-      const outcome = checkVoteOutcome(votes, activeMemberCount);
-      const updates: Record<string, unknown> = { votes: arrayUnion(newVote), updatedAt: getTimestamp() };
-      if (outcome === 'verified') updates.status = 'awaitingResale';
-      if (outcome === 'rejected') updates.status = 'rejectedByVote';
-      await updateDoc(doc(db, 'exitRequests', req.id), updates);
+      const res = await fetch(`/api/exit-requests/${req.id}/vote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ vote }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        showToast(data.error || 'Failed to vote', 'error');
+        return;
+      }
       showToast('Vote recorded');
+      // onSnapshot pushes the authoritative state, so no local patching here —
+      // a local guess is exactly what made the old version disagree with the
+      // server.
     } catch {
       showToast('Failed to vote', 'error');
     }
     setBusyId(null);
   };
 
+  /**
+   * Mark a refund paid and close the membership.
+   *
+   * This used to write `members/{id}.active = false` straight from the browser.
+   * That was a live privilege hole: the button was behind a client-side role
+   * check and the rules allow `update: if true`, so any signed-in member could
+   * have closed anyone's membership — and since the vote threshold counts active
+   * members, deactivating people shrinks the denominator of every later exit
+   * vote. Both writes now happen server-side, in one transaction.
+   */
   const markPaidOut = async (req: ExitRequest) => {
     if (!user) return;
     setBusyId(req.id);
     try {
-      await updateDoc(doc(db, 'exitRequests', req.id), { status: 'paidOut', paidOutAt: Date.now(), updatedAt: Date.now() });
-      await updateDoc(doc(db, 'members', req.memberId), { active: false, updatedAt: Date.now() });
+      const res = await fetch(`/api/exit-requests/${req.id}/payout`, {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        showToast(data.error || 'Failed to update', 'error');
+        return;
+      }
       showToast(`${req.memberName}'s refund marked paid — membership closed`);
+      // onSnapshot pushes the new request status and member record.
     } catch {
       showToast('Failed to update', 'error');
     }
@@ -139,7 +173,7 @@ export function ExitRequestsContent() {
                   </div>
                 )}
 
-                {req.status === 'awaitingResale' && canRecordFunds(user) && (
+                {req.status === 'awaitingResale' && isAdmin(user) && (
                   <Button size="sm" loading={busyId === req.id} onClick={() => markPaidOut(req)} className="w-full mt-3">
                     Mark Refund Paid — Close Membership
                   </Button>
