@@ -58,6 +58,14 @@ scripts/roster.local.json
 # and PIN hashes, never committed
 /backups
 
+# Downloaded Firebase service-account keys. These grant full admin on the
+# project — the same standing as the PIN hashes above, and just as damaging if
+# they reach a remote. Firebase names them
+# <project>-firebase-adminsdk-<suffix>.json, but match on the shape, not the
+# name, so a renamed copy is caught too.
+*-firebase-adminsdk-*.json
+*service-account*.json
+
 # Local agent/assistant guidance (not part of the project)
 CLAUDE.md
 AGENTS.md
