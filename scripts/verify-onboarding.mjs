@@ -14,7 +14,9 @@
  *   6. weak PINs (0000, 1234) are refused, because 0000 is what seed-members
  *      hands out and 1234 is the first thing anyone tries;
  *   7. an admin PIN reset deletes the hash from members/ as well — the other
- *      route by which an exposure could outlive the credential it came from.
+ *      route by which an exposure could outlive the credential it came from;
+ *   8. a secrets document with no pinHash does not brick login with a 500, and
+ *      the lockout counter still lands where it was read from.
  *
  * Fixtures are written and removed through the admin SDK — the rules deny
  * `delete`, so a client-SDK teardown would silently fail and leave junk behind.
@@ -69,6 +71,9 @@ const FIXTURES = [
   // A second admin who signs in for real, so the reset-pin checks below drive
   // the actual endpoint through its actual auth guard rather than a stub.
   { name: 'Mary Njeri', phone: '+254700000905', pin: '0000', active: true, role: 'admin' },
+  // An unmigrated member whose secrets doc exists but carries no pinHash —
+  // the exact production state that made login return 500.
+  { name: 'Nia Achieng', phone: '+254712399977', pin: '0000', active: true },
 ];
 
 const ids = {};
@@ -347,6 +352,59 @@ async function run() {
     henryDoc.role === 'member' && henryDoc.active !== false,
     `role ${henryDoc.role}, active ${henryDoc.active}`
   );
+
+  // --- a hashless secrets doc must not brick login ----------------------
+  // This is a production 500, reproduced. Three code paths wrote a secrets
+  // document without a pinHash — the failed-attempt counter, the admin Unlock,
+  // and writeSecrets — and readSecrets only fell back when the document was
+  // entirely absent. So a member who mistyped one PIN had a secrets doc
+  // created holding only a counter, login read it as authoritative, and
+  // bcrypt.compare(pin, undefined) threw on every subsequent attempt. Correct
+  // PIN included. Anyone who knew the phone number could trigger it on purpose.
+  const niaId = ids['Nia Achieng'];
+  await admin
+    .collection('secrets')
+    .doc(niaId)
+    .set({ failedAttempts: 2, lockedUntil: null });
+  // The hash is still in members/ only, so readSecrets must fall back there —
+  // and the counter it falls back to is members.failedAttempts (0), not the 2
+  // sitting in the abandoned secrets doc.
+  const wrongNia = await post(LOGIN, { phone: '0712399977', pin: '1111' });
+  const niaAfter2 = await admin.collection('members').doc(niaId).get();
+  check(
+    'a wrong PIN against a hashless secrets doc is a 401, not a 500',
+    wrongNia.status === 401,
+    `HTTP ${wrongNia.status}`
+  );
+  check(
+    'the counter increments in members/, where it was read from',
+    niaAfter2.data()?.failedAttempts === 1 && niaAfter2.data()?.lockedUntil === null,
+    `failedAttempts ${niaAfter2.data()?.failedAttempts}`
+  );
+  // Reading the counter from members/ while writing it to secrets/ would let an
+  // unmigrated member be brute-forced indefinitely: the count would climb in a
+  // document nobody consults and the lockout would never fire.
+  const secretsAfterFail = await admin.collection('secrets').doc(niaId).get();
+  check(
+    'the counter is not written to the secrets doc it was not read from',
+    secretsAfterFail.data()?.failedAttempts === 2,
+    `secrets failedAttempts ${secretsAfterFail.data()?.failedAttempts}`
+  );
+  // The correct PIN must still work — this is the 500 being fixed.
+  const niaLogin = await post(LOGIN, { phone: '0712399977', pin: '0000' });
+  check('the correct PIN still signs in (was a 500)', niaLogin.ok, `HTTP ${niaLogin.status}`);
+  const niaPromoted = await admin.collection('secrets').doc(niaId).get();
+  check(
+    'a successful login promotes the member into secrets/',
+    typeof niaPromoted.data()?.pinHash === 'string' && niaPromoted.data()?.migratedAt !== undefined
+  );
+  check(
+    'the promotion does not carry a stale counter across',
+    niaPromoted.data()?.failedAttempts === 0 && niaPromoted.data()?.lockedUntil === null,
+    `secrets failedAttempts ${niaPromoted.data()?.failedAttempts}`
+  );
+  const niaMember = await admin.collection('members').doc(niaId).get();
+  check('the counter is cleared on the member doc too', niaMember.data()?.failedAttempts === 0);
 
   // --- summary ------------------------------------------------------------
   const failed = results.filter((r) => !r.pass);

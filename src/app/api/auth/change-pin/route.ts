@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { headers } from 'next/headers';
 import { isAdminConfigured, adminDb } from '@/lib/server/admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { resolveSession, createSession, sessionCookie, revokeAllSessions } from '@/lib/server/session';
 import { readSecrets, writeSecrets, publicMember } from '@/lib/server/members';
 import { cookies } from 'next/headers';
@@ -50,10 +51,21 @@ export async function POST(request: Request) {
 
   const pinHash = await bcrypt.hash(newPin, 10);
   await writeSecrets(memberId, { pinHash, failedAttempts: 0, lockedUntil: null });
-  // The new hash goes to secrets/ only. The member doc is client-readable, so
-  // writing it there too would re-expose every PIN the member has ever set.
+  // The new hash goes to secrets/ only — the member doc is client-readable, so
+  // writing it there too would re-expose the PIN. But for a member who has not
+  // migrated yet, the doc still carries the hash of the PIN they just replaced,
+  // and leaving it is the whole vulnerability: the old PIN stays readable to
+  // every signed-in member. Deleting is the difference between changing a PIN
+  // and changing a PIN *safely*. The admin reset and the onboarding claim do
+  // the same thing.
   await adminDb.collection('members').doc(memberId).set(
-    { mustChangePin: false, updatedAt: Date.now() },
+    {
+      mustChangePin: false,
+      pinHash: FieldValue.delete(),
+      failedAttempts: FieldValue.delete(),
+      lockedUntil: FieldValue.delete(),
+      updatedAt: Date.now(),
+    },
     { merge: true }
   );
 

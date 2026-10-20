@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { cookies, headers } from 'next/headers';
-import { isAdminConfigured, adminDb } from '@/lib/server/admin';
+import { isAdminConfigured } from '@/lib/server/admin';
 import { createSession, sessionCookie } from '@/lib/server/session';
 import {
   findMemberByPhone,
   readSecrets,
-  writeSecrets,
+  recordFailedAttempt,
+  clearLockout,
   backfillSecrets,
   publicMember,
   MAX_ATTEMPTS,
-  LOCK_MINUTES,
 } from '@/lib/server/members';
 
 export const runtime = 'nodejs';
@@ -79,22 +79,7 @@ export async function POST(request: Request) {
   const valid = await bcrypt.compare(pin, secrets.pinHash);
 
   if (!valid) {
-    // Increment in a transaction so parallel attempts cannot race the counter
-    // past the lockout — a client-side increment was resettable by the client
-    // it was meant to constrain.
-    const ref = adminDb.collection('secrets').doc(member.id);
-    await adminDb.runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
-      const current = (snap.data() as { failedAttempts?: number } | undefined)?.failedAttempts ?? 0;
-      const attempts = current + 1;
-      const patch: Record<string, number | null> = { failedAttempts: attempts };
-      if (attempts >= MAX_ATTEMPTS) {
-        patch.lockedUntil = Date.now() + LOCK_MINUTES * 60 * 1000;
-      }
-      tx.set(ref, patch, { merge: true });
-    });
-
-    const attempts = secrets.failedAttempts + 1;
+    const attempts = await recordFailedAttempt(secrets);
     if (attempts >= MAX_ATTEMPTS) {
       return NextResponse.json(
         { success: false, error: 'Account locked due to too many failed attempts.' },
@@ -108,11 +93,11 @@ export async function POST(request: Request) {
     );
   }
 
-  // Success. Clear the counter and, if this member predates the secrets
-  // split, promote them on the way through.
-  await writeSecrets(member.id, { failedAttempts: 0, lockedUntil: null });
-  const migrated = await adminDb.collection('secrets').doc(member.id).get();
-  if (!migrated.get('migratedAt')) {
+  // Success. Clear the counter in whichever document holds it, and promote the
+  // member out of the legacy shape on the way through — the promotion is what
+  // eventually makes the fallback in readSecrets unnecessary.
+  await clearLockout(secrets);
+  if (secrets.source === 'members') {
     await backfillSecrets(member.id, secrets);
   }
 

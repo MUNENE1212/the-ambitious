@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '@/lib/server/admin';
 import { requireAdmin } from '@/lib/server/guard';
-import { normalizePhone } from '@/lib/server/members';
+import { normalizePhone, readSecrets, clearLockout } from '@/lib/server/members';
 import { revokeAllSessions } from '@/lib/server/session';
 
 export const runtime = 'nodejs';
@@ -119,9 +119,12 @@ export async function POST(request: Request, { params }: Params) {
     }
 
     case 'unlock': {
-      await secretRef.set({ failedAttempts: 0, lockedUntil: null }, { merge: true });
-      // Cleared on the member doc too, while unmigrated members still read it.
-      await memberRef.set({ failedAttempts: 0, lockedUntil: null, updatedAt: now }, { merge: true });
+      // Write the counters where readSecrets will actually look for them. A
+      // blanket write to secrets/ created a hashless secrets document for any
+      // member who had not migrated, which readSecrets then treated as
+      // authoritative and login could never get past.
+      const existing = await readSecrets(id);
+      if (existing) await clearLockout(existing);
       return NextResponse.json({ success: true });
     }
 
